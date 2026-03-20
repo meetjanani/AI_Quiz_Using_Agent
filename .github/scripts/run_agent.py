@@ -1,103 +1,73 @@
+```python
 import os
 import json
 import requests
+import re
+import subprocess
 
-# 1. Environment Variables setup by GitHub Actions
 API_KEY = os.environ.get("LLM_API_KEY")
 GH_TOKEN = os.environ.get("GH_TOKEN")
 PR_NUMBER = os.environ.get("PR_NUMBER")
 REPO_NAME = os.environ.get("REPO_NAME")
+# GitHub Actions sets this environment variable automatically
+HEAD_REF = os.environ.get("GITHUB_HEAD_REF")
 
-# Gemini API Endpoint for Gemini 2.5 Flash
 LLM_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
 def read_file(filepath):
     with open(filepath, 'r') as file:
         return file.read()
 
+def run_command(command):
+    """Utility to run shell commands (like git)"""
+    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"Command failed: {command}\nError: {result.stderr}")
+    return result.returncode == 0
+
 def main():
     if not API_KEY:
-        print("Error: LLM_API_KEY is missing. Please add your Gemini API Key to GitHub Secrets.")
+        print("Error: LLM_API_KEY is missing.")
         return
 
-    print("Reading Agent Prompts and PR Diff...")
-    
-    # Load your Master Agent instructions
-    try:
-        master_agent_prompt = read_file(".github/scripts/master-reviewer-agent.md")
-    except FileNotFoundError:
-        print("Error: master-reviewer-agent.md not found.")
-        return
-    
-    # Load the actual code changes
+    master_agent_prompt = read_file(".github/scripts/master-reviewer-agent.md")
+
     try:
         pr_diff = read_file("pr_diff.patch")
     except FileNotFoundError:
         print("No diff found. Skipping review.")
         return
 
-    if not pr_diff.strip():
-        print("Diff is empty. Skipping review.")
-        return
+    print("Sending code to Gemini Agent for review & fixing...")
 
-    print("Sending code to Gemini Agent for review...")
-    
-    # 2. Construct the prompt and payload for Gemini API
-    system_instruction = f"{master_agent_prompt}\n\nReview the following code diff based strictly on your role and constraints."
-    user_prompt = f"Here is the git diff for the PR:\n\n```diff\n{pr_diff}\n```"
-    
+    system_instruction = f"{master_agent_prompt}\n\nReview the following code diff. If you find issues, output the complete corrected file using the <file_update> tag."
+    user_prompt = f"Here is the git diff:\n\n```diff\n{pr_diff}\n```"
+
     headers = {
         "Content-Type": "application/json",
-        "x-goog-api-key": API_KEY  # Gemini uses this header for auth
-    }
-    
-    # Gemini requires a specific JSON payload structure
-    payload = {
-        "systemInstruction": {
-            "parts": [{"text": system_instruction}]
-        },
-        "contents": [
-            {
-                "role": "user",
-                "parts": [{"text": user_prompt}]
-            }
-        ],
-        "generationConfig": {
-            "temperature": 0.2  # Keeps the review strict, analytical, and less "creative"
-        }
+        "x-goog-api-key": API_KEY
     }
 
-    # 3. Call the Gemini API
+    payload = {
+        "systemInstruction": {"parts": [{"text": system_instruction}]},
+        "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+        "generationConfig": {"temperature": 0.1}
+    }
+
     response = requests.post(LLM_API_URL, headers=headers, json=payload)
     response_data = response.json()
     
+    # Re-introducing the API error check
     if "error" in response_data:
         print(f"API Error: {response_data['error']['message']}")
         return
-        
+
     try:
-        # Extract the text response from Gemini's payload structure
         review_comment = response_data["candidates"][0]["content"]["parts"][0]["text"]
     except KeyError:
-        print("Error parsing Gemini response. Unexpected format.")
-        print(response_data)
+        print("Error parsing Gemini response. Unexpected format or missing candidates.")
+        print(response_data) # Print full response for debugging
         return
 
-    print("Review complete. Posting comment to GitHub PR...")
-
-    # 4. Post the AI's response back to GitHub as a PR comment
-    gh_headers = {
-        "Authorization": f"token {GH_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
-    }
-    gh_url = f"https://api.github.com/repos/{REPO_NAME}/issues/{PR_NUMBER}/comments"
-    
-    gh_response = requests.post(gh_url, headers=gh_headers, json={"body": review_comment})
-    
-    if gh_response.status_code == 201:
-        print("✅ Successfully posted Gemini Code Review to PR!")
-    else:
-        print(f"❌ Failed to post to GitHub: {gh_response.text}")
-
-if __name__ == "__main__":
-    main()
+    print("Searching for auto-fixes in AI response...")
+    # Regex to find <file_update path="..."> ...content...
