@@ -1,4 +1,3 @@
-```python
 import os
 import json
 import requests
@@ -38,9 +37,14 @@ def main():
         print("No diff found. Skipping review.")
         return
 
+    if not pr_diff.strip():
+        print("Diff is empty. Skipping review.")
+        return
+
     print("Sending code to Gemini Agent for review & fixing...")
 
-    system_instruction = f"{master_agent_prompt}\n\nReview the following code diff. If you find issues, output the complete corrected file using the <file_update> tag."
+    # Updated Prompt to explicitly forbid markdown blocks inside the tag
+    system_instruction = f"{master_agent_prompt}\n\nReview the following code diff. If you find issues, output the complete corrected file using the <file_update> tag. CRITICAL: Provide RAW CODE ONLY inside the tag. Do NOT wrap the code in markdown backticks (```)."
     user_prompt = f"Here is the git diff:\n\n```diff\n{pr_diff}\n```"
 
     headers = {
@@ -56,8 +60,7 @@ def main():
 
     response = requests.post(LLM_API_URL, headers=headers, json=payload)
     response_data = response.json()
-    
-    # Re-introducing the API error check
+
     if "error" in response_data:
         print(f"API Error: {response_data['error']['message']}")
         return
@@ -65,9 +68,62 @@ def main():
     try:
         review_comment = response_data["candidates"][0]["content"]["parts"][0]["text"]
     except KeyError:
-        print("Error parsing Gemini response. Unexpected format or missing candidates.")
-        print(response_data) # Print full response for debugging
+        print("Error parsing Gemini response.")
         return
 
     print("Searching for auto-fixes in AI response...")
-    # Regex to find <file_update path="..."> ...content...
+    pattern = r'<file_update path="(.*?)">(.*?)</file_update>'
+    matches = re.findall(pattern, review_comment, re.DOTALL)
+
+    fixes_applied = False
+    for filepath, new_content in matches:
+        filepath = filepath.strip()
+        new_content = new_content.strip()
+
+        # --- SAFEGUARD 1: Do not touch critical files ---
+        if filepath.startswith(".github/") or "run_agent.py" in filepath:
+            print(f"⚠️ SECURITY BLOCK: Refusing to modify critical file -> {filepath}")
+            continue
+
+        # --- SAFEGUARD 2: Strip Markdown backticks if AI included them ---
+        if new_content.startswith("```"):
+            lines = new_content.split('\n')
+            if len(lines) > 1 and lines[0].startswith("```"):
+                lines = lines[1:] # Remove top ```kotlin
+            if len(lines) > 0 and lines[-1].strip().startswith("```"):
+                lines = lines[:-1] # Remove bottom ```
+            new_content = '\n'.join(lines).strip()
+
+        print(f"Applying safe fix to: {filepath}")
+        try:
+            with open(filepath, 'w') as f:
+                f.write(new_content)
+            fixes_applied = True
+        except Exception as e:
+            print(f"Failed to write file {filepath}: {e}")
+
+    # Commit and Push Logic remains the same
+    if fixes_applied:
+        print("Committing and pushing fixes to the PR branch...")
+        run_command('git config --global user.name "AI Code Agent"')
+        run_command('git config --global user.email "ai-agent@example.com"')
+        run_command(f'git checkout {HEAD_REF}')
+        run_command('git add .')
+        run_command('git commit -m "🤖 AI Agent Auto-Fix: Resolved code review findings"')
+        run_command(f'git push origin {HEAD_REF}')
+        print("✅ Auto-fixes pushed successfully!")
+    else:
+        print("No auto-fixes applied.")
+
+    print("Posting review comment to GitHub PR...")
+    gh_headers = {
+        "Authorization": f"token {GH_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    gh_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){REPO_NAME}/issues/{PR_NUMBER}/comments"
+
+    clean_comment = re.sub(pattern, '> *Auto-fix successfully generated for this file.*', review_comment, flags=re.DOTALL)
+    requests.post(gh_url, headers=gh_headers, json={"body": clean_comment})
+
+if __name__ == "__main__":
+    main()
