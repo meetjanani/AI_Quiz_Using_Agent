@@ -6,7 +6,7 @@ on:
 
 permissions:
   pull-requests: write # Required to post comments on the PR
-  contents: read
+  contents: write
 
 jobs:
   ai-code-review:

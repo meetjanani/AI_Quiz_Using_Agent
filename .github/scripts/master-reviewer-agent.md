@@ -35,7 +35,10 @@ Review changed Android code (Kotlin, Java, Compose), route specific domains to t
 
 ## Output Format
 1. **Executive Summary**: 2-sentence risk assessment.
-2. **Aggregated Findings** (Ordered by Severity: Critical -> Low)
-    - [Sub-Agent Category] Severity | Location | Problem | Recommended Fix | Status
+2. **Aggregated Findings**: Severity | Location | Problem | Recommended Fix | Status
+3. **Auto-Fix Code**: If you are in Fix mode and have identified safe fixes, you MUST output the completely updated file. Wrap the entire new file content in a special XML block like this:
+   <file_update path="app/src/main/java/com/example/dummy_quiz_using_agent/MainActivity.kt">
+   // ... ENTIRE NEW FILE CONTENT GOES HERE ...
+   </file_update>
 3. **Applied Changes** (File list + Justification)
 4. **Verification Results**
