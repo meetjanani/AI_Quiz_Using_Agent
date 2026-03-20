@@ -1,48 +1,41 @@
-{\rtf1\ansi\ansicpg1252\cocoartf2868
-\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
-{\colortbl;\red255\green255\blue255;}
-{\*\expandedcolortbl;;}
-\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
-\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+name: Autonomous Master Agent Review
 
-\f0\fs24 \cf0 name: Autonomous Master Agent Review\
-\
-on:\
-  pull_request:\
-    types: [opened, synchronize] # Runs on new PRs and when you push new commits\
-\
-permissions:\
-  pull-requests: write # Required to post comments on the PR\
-  contents: read\
-\
-jobs:\
-  ai-code-review:\
-    runs-on: ubuntu-latest\
-    steps:\
-      - name: Checkout Repository\
-        uses: actions/checkout@v4\
-        with:\
-          fetch-depth: 0 # Fetches full history so we can generate an accurate diff\
-\
-      - name: Setup Python\
-        uses: actions/setup-python@v5\
-        with:\
-          python-version: '3.10'\
-\
-      - name: Install Dependencies\
-        run: pip install requests\
-\
-      - name: Generate Code Diff\
-        run: |\
-          # Compares the PR branch against the target branch (e.g., main)\
-          git fetch origin $\{\{ github.base_ref \}\}\
-          git diff origin/$\{\{ github.base_ref \}\}...HEAD > pr_diff.patch\
-\
-      - name: Run AI Master Reviewer\
-        env:\
-          # You will need to add your API key to GitHub Secrets\
-          LLM_API_KEY: $\{\{ secrets.LLM_API_KEY \}\} \
-          GH_TOKEN: $\{\{ secrets.GITHUB_TOKEN \}\}\
-          PR_NUMBER: $\{\{ github.event.pull_request.number \}\}\
-          REPO_NAME: $\{\{ github.repository \}\}\
-        run: python .github/scripts/run_agent.py}
+on:
+  pull_request:
+    types: [opened, synchronize] # Runs on new PRs and when you push new commits
+
+permissions:
+  pull-requests: write # Required to post comments on the PR
+  contents: read
+
+jobs:
+  ai-code-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Fetches full history so we can generate an accurate diff
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: pip install requests
+
+      - name: Generate Code Diff
+        run: |
+          # Compares the PR branch against the target branch (e.g., main)
+          git fetch origin ${{ github.base_ref }}
+          git diff origin/${{ github.base_ref }}...HEAD > pr_diff.patch
+
+      - name: Run AI Master Reviewer
+        env:
+          # You will need to add your API key to GitHub Secrets
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO_NAME: ${{ github.repository }}
+        run: python .github/scripts/run_agent.py
