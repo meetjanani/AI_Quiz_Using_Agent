@@ -29,7 +29,8 @@ jobs:
         run: |
           # Compares the PR branch against the target branch (e.g., main)
           git fetch origin ${{ github.base_ref }}
-          git diff origin/${{ github.base_ref }}...HEAD > pr_diff.patch
+          # ONLY include the app folder and gradle files in the diff!
+          git diff origin/${{ github.base_ref }}...HEAD -- app/ build.gradle.kts build.gradle settings.gradle.kts > pr_diff.patch
 
       - name: Run AI Master Reviewer
         env:

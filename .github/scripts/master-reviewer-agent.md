@@ -28,6 +28,10 @@ Review changed Android code (Kotlin, Java, Compose), route specific domains to t
     - Maintain the constraint: Always apply the smallest possible diff.
     - Run verification (simulated compile/lint checks).
 
+## Strict Constraints & Checks
+- NEVER attempt to review, modify, or auto-fix files in the `.github/` directory. Restrict all your actions to application source code only.
+- When generating fixes inside `<file_update>` tags, output RAW code only. Do NOT use markdown code block formatting inside the XML tags.
+
 ## Verification Requirements
 - No new compile/lint errors in touched files.
 - Ensure fixes do not violate Android platform constraints (e.g., UI thread blocking).
