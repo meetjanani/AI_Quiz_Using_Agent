@@ -22,7 +22,7 @@ class GeminiService(
         questionCount: Int
     ): List<QuizQuestion> {
         if (apiKey.isBlank()) {
-            throw GeminiServiceException.MissingApiKey()
+            throw GeminiServiceException.MissingApiKey
         }
 
         val model = GenerativeModel(
@@ -153,7 +153,7 @@ class GeminiService(
                 GeminiServiceException.Network("Network error while contacting Gemini.")
             }
             message.contains("quota") || message.contains("429") || message.contains("resource exhausted") -> {
-                GeminiServiceException.QuotaExceeded()
+                GeminiServiceException.QuotaExceeded
             }
             message.contains("404") || message.contains("model") && message.contains("not") -> {
                 GeminiServiceException.InvalidModel("Gemini model '$modelName' is unavailable.")
@@ -168,11 +168,11 @@ class GeminiService(
 }
 
 sealed class GeminiServiceException(message: String, cause: Throwable? = null) : Exception(message, cause) {
-    class MissingApiKey : GeminiServiceException(
+    data object MissingApiKey : GeminiServiceException(
         "Missing API key. Add GEMINI_API_KEY to local.properties and rebuild the app."
     )
 
-    class QuotaExceeded : GeminiServiceException(
+    data object QuotaExceeded : GeminiServiceException(
         "Gemini quota is exhausted. Try later or use the sample quiz."
     )
 
