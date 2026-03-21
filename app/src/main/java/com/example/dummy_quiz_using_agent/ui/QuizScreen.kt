@@ -91,7 +91,7 @@ private fun SetupContent(
         Text("AI Quiz Generator", style = MaterialTheme.typography.headlineMedium)
         Text("Pick technology and level to generate a personalized quiz.")
 
-        Text("Technology", style = MaterialTheme.typography.titleMedium)
+        Text("Technology Static", style = MaterialTheme.typography.titleMedium)
         Technology.entries.forEach { technology ->
             SelectionRow(
                 text = technology.displayName,
