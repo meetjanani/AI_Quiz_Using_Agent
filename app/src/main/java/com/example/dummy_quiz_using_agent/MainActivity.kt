@@ -18,7 +18,7 @@ class MainActivity : ComponentActivity() {
 
     private val repository: QuizRepository by lazy {
         QuizRepository(
-            geminiService = GeminiService(apiKey = "Hello")
+            geminiService = GeminiService(apiKey = "Hello T")
         )
     }
 
