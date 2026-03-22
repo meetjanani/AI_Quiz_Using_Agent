@@ -32,6 +32,19 @@ jobs:
           # ONLY include the app folder and gradle files in the diff!
           git diff origin/${{ github.base_ref }}...HEAD -- app/ build.gradle.kts build.gradle settings.gradle.kts > pr_diff.patch
 
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Run unit tests and generate coverage report (non-blocking)
+        run: |
+          ./gradlew :app:testDebugUnitTest :app:jacocoTestReport --console=plain || true
+
+      - name: Print per-file coverage summary
+        run: python .github/scripts/check_coverage.py || true
+
       - name: Collect Android lint context (non-blocking)
         run: |
           ./gradlew :app:lintDebug --console=plain > lint_output.txt 2>&1 || true

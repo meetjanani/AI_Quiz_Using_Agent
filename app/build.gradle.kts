@@ -3,6 +3,7 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    jacoco
 }
 
 val localProperties = Properties().apply {
@@ -32,6 +33,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            enableUnitTestCoverage = true
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -64,10 +68,57 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     testImplementation(libs.junit)
+    testImplementation(libs.mockk)
+    testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+}
+
+// ── JaCoCo coverage report ─────────────────────────────────────────────────
+jacoco {
+    toolVersion = "0.8.11"
+}
+
+tasks.register<JacocoReport>("jacocoTestReport") {
+    dependsOn("testDebugUnitTest")
+    group = "Reporting"
+    description = "Generate JaCoCo coverage report for debug unit tests."
+
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+    }
+
+    val excludeFilter = listOf(
+        "**/R.class", "**/R\$*.class",
+        "**/BuildConfig.*", "**/Manifest*.*",
+        "**/*Test*.*", "**/android/**",
+        "**/ui/**",
+        "**/MainActivity*",
+    )
+
+    // AGP 9.x outputs Kotlin classes here (not tmp/kotlin-classes)
+    val kotlinClasses = fileTree(
+        "${layout.buildDirectory.get().asFile}/intermediates/built_in_kotlinc/debug/compileDebugKotlin/classes"
+    ) {
+        exclude(excludeFilter)
+    }
+
+    sourceDirectories.setFrom(files("${projectDir}/src/main/java"))
+    classDirectories.setFrom(files(kotlinClasses))
+
+    // AGP 9.x writes .exec file here when enableUnitTestCoverage = true
+    executionData.setFrom(
+        fileTree(layout.buildDirectory.get().asFile) {
+            include(
+                "**/outputs/unit_test_code_coverage/**/*.exec",
+                "**/*.exec",
+                "**/*.ec"
+            )
+        }
+    )
 }

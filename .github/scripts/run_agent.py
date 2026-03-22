@@ -244,12 +244,24 @@ def build_coverage_alerts(pr_diff):
                     best = coverage
                     best_key = normalized_suffix
 
+        related_tests = _find_related_test_files(source_file)
+
         if best is None:
+            # File is not present in the coverage report at all — treat as 0% coverage.
+            alerts.append({
+                "source_file": source_file,
+                "coverage_pct": 0.0,
+                "missing_pct": 75.0,
+                "covered_lines": 0,
+                "total_lines": 0,
+                "matched_report_path": "not found in coverage report",
+                "related_tests": related_tests,
+                "no_data": True,
+            })
             continue
 
         if best["percentage"] < 75.0:
             missing_pct = max(0.0, 75.0 - best["percentage"])
-            related_tests = _find_related_test_files(source_file)
             alerts.append({
                 "source_file": source_file,
                 "coverage_pct": best["percentage"],
@@ -258,6 +270,7 @@ def build_coverage_alerts(pr_diff):
                 "total_lines": best["total"],
                 "matched_report_path": best_key or "unknown",
                 "related_tests": related_tests,
+                "no_data": False,
             })
     return alerts
 
@@ -308,14 +321,23 @@ def post_findings_to_github(findings, fallback_comment, coverage_alerts=None):
     for index, alert in enumerate(coverage_alerts, start=1):
         related_tests = alert["related_tests"]
         tests_text = "\n".join([f"  - `{path}`" for path in related_tests]) if related_tests else "  - No matching test file found by naming convention."
+        no_data = alert.get("no_data", False)
+        if no_data:
+            coverage_line = "Current Coverage: **No coverage data found** (file not instrumented or no tests run)"
+        else:
+            coverage_line = (
+                f"Current Coverage: **{alert['coverage_pct']:.2f}%**"
+                f" ({alert['covered_lines']}/{alert['total_lines']} lines)"
+            )
         body = (
-            f"### Special Coverage Alert {index}\n"
-            f"- Scope: `{alert['source_file']}`\n"
-            f"- Current Coverage: **{alert['coverage_pct']:.2f}%** ({alert['covered_lines']}/{alert['total_lines']} lines)\n"
-            f"- Missing to reach 75%: **{alert['missing_pct']:.2f}%**\n"
-            f"- Coverage Source: `{alert['matched_report_path']}`\n"
-            f"- Related test files:\n{tests_text}\n"
-            f"- Suggested action: Add/extend tests for uncovered branches and failure paths until this file reaches at least 75% coverage."
+            f"### ⚠️ Coverage Alert {index} — Below 75% Threshold\n"
+            f"- **File:** `{alert['source_file']}`\n"
+            f"- {coverage_line}\n"
+            f"- **Missing to reach 75%:** `{alert['missing_pct']:.2f}%`\n"
+            f"- **Coverage Source:** `{alert['matched_report_path']}`\n"
+            f"- **Related test files:**\n{tests_text}\n"
+            f"- **Suggested action:** Add or extend tests for uncovered branches and failure paths "
+            f"until this file reaches at least 75% line coverage."
         )
         response = requests.post(gh_url, headers=gh_headers, json={"body": body}, timeout=30)
         if response.status_code >= 300:
