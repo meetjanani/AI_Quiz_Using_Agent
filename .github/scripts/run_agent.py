@@ -67,6 +67,8 @@ def parse_review_xml(review_text):
     for node in finding_nodes:
         findings.append({
             "severity": _normalized_severity(node.findtext("severity", default="")),
+            "file": (node.findtext("file", default="") or "").strip(),
+            "line": _parse_int(node.findtext("line", default="")),
             "location": (node.findtext("location", default="") or "").strip() or "Unknown location",
             "problem": (node.findtext("problem", default="") or "").strip() or "No problem text provided",
             "impact": (node.findtext("impact", default="") or "").strip() or "No impact provided",
@@ -90,6 +92,13 @@ def parse_review_xml(review_text):
 def _severity_rank(severity):
     order = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3, "Unspecified": 4}
     return order.get(severity, 4)
+
+def _parse_int(value):
+    """Safely parse an integer from a string, returning None on failure."""
+    try:
+        return int((value or "").strip())
+    except (ValueError, TypeError):
+        return None
 
 def extract_changed_files_from_diff(diff_text):
     files = []
@@ -298,7 +307,70 @@ def maybe_collect_lint_context():
         print(f"Unable to collect local lint context: {exc}")
         return ""
 
-def post_findings_to_github(findings, fallback_comment, coverage_alerts=None):
+
+def build_diff_line_map(diff_text):
+    """
+    Parses a unified diff and returns:
+        { file_path: set_of_new_file_line_numbers }
+
+    Only RIGHT-side (new/added/context) lines that appear in the diff are
+    tracked, because GitHub only allows inline review comments on those lines.
+    """
+    line_map = {}
+    current_file = None
+    new_line_number = 0
+
+    for raw_line in diff_text.splitlines():
+        # New file path line
+        if raw_line.startswith("+++ b/"):
+            current_file = raw_line[len("+++ b/"):].strip()
+            if current_file == "/dev/null":
+                current_file = None
+            else:
+                line_map.setdefault(current_file, set())
+            new_line_number = 0
+            continue
+
+        if current_file is None:
+            continue
+
+        # Hunk header: @@ -old_start,old_count +new_start,new_count @@
+        hunk_match = re.match(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@", raw_line)
+        if hunk_match:
+            new_line_number = int(hunk_match.group(1)) - 1  # incremented before first use
+            continue
+
+        if raw_line.startswith("+"):
+            new_line_number += 1
+            line_map[current_file].add(new_line_number)
+        elif raw_line.startswith(" "):    # unchanged context line
+            new_line_number += 1
+            line_map[current_file].add(new_line_number)
+        # Lines starting with "-" belong to the old file; skip them.
+
+    return line_map
+
+
+def get_pr_head_sha():
+    """Returns the latest commit SHA on the PR head branch, or None on failure."""
+    if not (GH_TOKEN and PR_NUMBER and REPO_NAME):
+        return None
+    headers = {
+        "Authorization": f"token {GH_TOKEN}",
+        "Accept": "application/vnd.github+json",
+    }
+    url = f"https://api.github.com/repos/{REPO_NAME}/pulls/{PR_NUMBER}"
+    try:
+        resp = requests.get(url, headers=headers, timeout=15)
+        if resp.status_code == 200:
+            return resp.json().get("head", {}).get("sha")
+        print(f"get_pr_head_sha: HTTP {resp.status_code}")
+    except Exception as exc:
+        print(f"get_pr_head_sha failed: {exc}")
+    return None
+
+
+def post_findings_to_github(findings, fallback_comment, coverage_alerts=None, pr_diff=""):
     coverage_alerts = coverage_alerts or []
     if not (GH_TOKEN and PR_NUMBER and REPO_NAME):
         print("GitHub env vars not fully set. Skipping PR comment posting.")
@@ -306,29 +378,40 @@ def post_findings_to_github(findings, fallback_comment, coverage_alerts=None):
 
     gh_headers = {
         "Authorization": f"token {GH_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
+        "Accept": "application/vnd.github+json",
     }
-    gh_url = f"https://api.github.com/repos/{REPO_NAME}/issues/{PR_NUMBER}/comments"
+    issues_url  = f"https://api.github.com/repos/{REPO_NAME}/issues/{PR_NUMBER}/comments"
+    reviews_url = f"https://api.github.com/repos/{REPO_NAME}/pulls/{PR_NUMBER}/reviews"
 
+    # ── No findings at all ────────────────────────────────────────────────────
     if not findings and not coverage_alerts:
-        body = "No findings. Reviewed for Android/Kotlin lint, static literals, magic numbers, formatting, and general code quality."
+        body = (
+            "✅ **AI Code Review passed — no issues found.**\n"
+            "Checked: Android lint · Kotlin lint/style · magic numbers · "
+            "hardcoded strings/colors · formatting · maintainability."
+        )
         if fallback_comment.strip():
-            body = f"{body}\n\nRaw reviewer output:\n{fallback_comment[:5000]}"
-        response = requests.post(gh_url, headers=gh_headers, json={"body": body}, timeout=30)
-        if response.status_code >= 300:
-            print(f"Failed posting no-findings comment: {response.status_code} {response.text}")
+            body += f"\n\nRaw reviewer output:\n{fallback_comment[:5000]}"
+        resp = requests.post(issues_url, headers=gh_headers, json={"body": body}, timeout=30)
+        if resp.status_code >= 300:
+            print(f"Failed posting no-findings comment: {resp.status_code} {resp.text}")
+        return
 
+    # ── Coverage alerts (always posted as general PR comments) ───────────────
     for index, alert in enumerate(coverage_alerts, start=1):
         related_tests = alert["related_tests"]
-        tests_text = "\n".join([f"  - `{path}`" for path in related_tests]) if related_tests else "  - No matching test file found by naming convention."
-        no_data = alert.get("no_data", False)
-        if no_data:
-            coverage_line = "Current Coverage: **No coverage data found** (file not instrumented or no tests run)"
-        else:
-            coverage_line = (
+        tests_text = (
+            "\n".join(f"  - `{p}`" for p in related_tests)
+            if related_tests else "  - No matching test file found by naming convention."
+        )
+        coverage_line = (
+            "Current Coverage: **No coverage data found** (file not instrumented or no tests run)"
+            if alert.get("no_data")
+            else (
                 f"Current Coverage: **{alert['coverage_pct']:.2f}%**"
                 f" ({alert['covered_lines']}/{alert['total_lines']} lines)"
             )
+        )
         body = (
             f"### ⚠️ Coverage Alert {index} — Below 75% Threshold\n"
             f"- **File:** `{alert['source_file']}`\n"
@@ -339,22 +422,95 @@ def post_findings_to_github(findings, fallback_comment, coverage_alerts=None):
             f"- **Suggested action:** Add or extend tests for uncovered branches and failure paths "
             f"until this file reaches at least 75% line coverage."
         )
-        response = requests.post(gh_url, headers=gh_headers, json={"body": body}, timeout=30)
-        if response.status_code >= 300:
-            print(f"Failed posting coverage alert {index}: {response.status_code} {response.text}")
+        resp = requests.post(issues_url, headers=gh_headers, json={"body": body}, timeout=30)
+        if resp.status_code >= 300:
+            print(f"Failed posting coverage alert {index}: {resp.status_code} {resp.text}")
 
-    for index, finding in enumerate(findings, start=1):
-        body = (
-            f"### Finding {index}\n"
-            f"- Severity: **{finding['severity']}**\n"
-            f"- Location: `{finding['location']}`\n"
-            f"- Problem: {finding['problem']}\n"
-            f"- Impact: {finding['impact']}\n"
-            f"- Probable Fix: {finding['probable_fix']}"
+    if not findings:
+        return
+
+    # ── Split findings: inline (pinned to a diff line) vs. fallback ──────────
+    diff_line_map = build_diff_line_map(pr_diff) if pr_diff else {}
+    commit_sha    = get_pr_head_sha()
+
+    severity_emoji = {"Critical": "🔴", "High": "🟠", "Medium": "🟡", "Low": "🔵"}
+
+    inline_comments   = []   # → single PR Review with per-line placement
+    fallback_findings = []   # → regular issue comments
+
+    for finding in findings:
+        file_path = finding.get("file", "").strip()
+        line_num  = finding.get("line")      # int or None
+        emoji     = severity_emoji.get(finding["severity"], "⚪")
+
+        prob_fix = finding["probable_fix"]
+        # Render fix as a Kotlin code block when it looks like code
+        if any(kw in prob_fix for kw in ["(", ".", "val ", "var ", "fun ", "->", "=", "\n"]):
+            fix_block = f"```kotlin\n{prob_fix}\n```"
+        else:
+            fix_block = prob_fix
+
+        comment_body = (
+            f"{emoji} **[{finding['severity']}] Code Review Finding**\n\n"
+            f"**📍 Location:** `{finding['location']}`\n\n"
+            f"**🐛 Problem:** {finding['problem']}\n\n"
+            f"**💥 Impact:** {finding['impact']}\n\n"
+            f"**🔧 Suggested Fix:**\n{fix_block}"
         )
-        response = requests.post(gh_url, headers=gh_headers, json={"body": body}, timeout=30)
-        if response.status_code >= 300:
-            print(f"Failed posting finding {index}: {response.status_code} {response.text}")
+
+        can_inline = (
+            commit_sha
+            and file_path
+            and line_num is not None
+            and file_path in diff_line_map
+            and line_num in diff_line_map[file_path]
+        )
+
+        if can_inline:
+            inline_comments.append({
+                "path": file_path,
+                "line": line_num,
+                "side": "RIGHT",
+                "body": comment_body,
+            })
+            print(f"  → Inline   [{finding['severity']}] {file_path}:{line_num}")
+        else:
+            fallback_findings.append((finding, comment_body))
+            reason = "no file/line info" if not (file_path and line_num) else "line not in diff"
+            print(f"  → Fallback [{finding['severity']}] {finding['location']} ({reason})")
+
+    # ── Post ONE PR Review containing all inline comments ────────────────────
+    if inline_comments and commit_sha:
+        review_payload = {
+            "commit_id": commit_sha,
+            "event": "COMMENT",
+            "body": (
+                f"🤖 **AI Code Review** — {len(inline_comments)} inline finding(s) detected. "
+                "Each comment is pinned to the exact line."
+            ),
+            "comments": inline_comments,
+        }
+        resp = requests.post(reviews_url, headers=gh_headers, json=review_payload, timeout=60)
+        if resp.status_code >= 300:
+            print(f"Failed posting inline PR review: {resp.status_code} {resp.text[:800]}")
+            # Demote to fallback so nothing is silently lost
+            for ic in inline_comments:
+                match = next(
+                    (f for f in findings
+                     if f.get("file") == ic["path"] and f.get("line") == ic["line"]),
+                    None,
+                )
+                if match:
+                    fallback_findings.append((match, ic["body"]))
+        else:
+            print(f"✅ Posted {len(inline_comments)} inline review comment(s) via PR Review API.")
+
+    # ── Post fallback findings as plain PR comments ───────────────────────────
+    for idx, (finding, body) in enumerate(fallback_findings, start=1):
+        full_body = f"### 🔍 Review Finding — `{finding['location']}`\n\n{body}"
+        resp = requests.post(issues_url, headers=gh_headers, json={"body": full_body}, timeout=30)
+        if resp.status_code >= 300:
+            print(f"Failed posting fallback finding {idx}: {resp.status_code} {resp.text}")
 
 def main():
     if not API_KEY:
@@ -381,17 +537,24 @@ def main():
         f"{master_agent_prompt}\n\n"
         "You are locked in Review mode. Do NOT generate <file_update> blocks and do NOT propose auto-edits in raw file form.\n"
         "Check specifically for Android lint rules, Kotlin lint/style, magic numbers, hardcoded static values (String/Int/Float/Double), formatting, maintainability, and correctness regressions.\n"
-        "If hardcoded values are found, recommend BuildConfig first when semantically appropriate; otherwise recommend the correct resource XML file.\n"
+        "If hardcoded values are found, recommend BuildConfig first when semantically appropriate; otherwise recommend the correct resource XML file.\n\n"
+        "IMPORTANT — Inline comment placement:\n"
+        "  • For every finding, you MUST provide the exact <file> path (relative to repo root, e.g. app/src/main/java/com/example/Foo.kt)\n"
+        "    and the exact <line> number (integer) of the problematic line as it appears in the NEW version of the file shown in the diff.\n"
+        "  • Use the diff hunk headers (@@ -old +new @@) to calculate the correct new-file line numbers.\n"
+        "  • These values are used to pin each comment to the exact line in the GitHub PR — like a human reviewer would.\n\n"
         "Return findings using ONLY this XML schema:\n"
         "<review_result>\n"
         "  <finding>\n"
         "    <severity>Critical|High|Medium|Low</severity>\n"
-        "    <location>path + symbol/line</location>\n"
-        "    <problem>...</problem>\n"
-        "    <impact>...</impact>\n"
-        "    <probable_fix>...</probable_fix>\n"
+        "    <file>app/src/main/java/com/example/package/FileName.kt</file>\n"
+        "    <line>42</line>\n"
+        "    <location>FileName.kt:42 — functionName()</location>\n"
+        "    <problem>Concise description of the issue</problem>\n"
+        "    <impact>What breaks or degrades if this is not fixed</impact>\n"
+        "    <probable_fix>Concrete code or step-by-step fix</probable_fix>\n"
         "  </finding>\n"
-        "  ...repeat one finding per <finding>...\n"
+        "  <!-- repeat one <finding> block per issue — do NOT merge multiple issues into one block -->\n"
         "</review_result>\n"
         "If no issues exist, return exactly: <review_result><no_findings>true</no_findings></review_result>."
     )
@@ -452,11 +615,12 @@ def main():
         print("Raw output follows:")
         print(review_comment)
         fallback = f"Schema error: {parsed['error']}\n\nRaw reviewer output:\n{review_comment[:5000]}"
-        post_findings_to_github([], fallback, coverage_alerts)
+        post_findings_to_github([], fallback, coverage_alerts, pr_diff=pr_diff)
     elif findings:
         print(f"Found {len(findings)} issue(s):")
         for index, finding in enumerate(findings, start=1):
-            print(f"{index}. [{finding['severity']}] {finding['location']} -> {finding['problem']}")
+            file_info = f" ({finding.get('file', '?')}:{finding.get('line', '?')})" if finding.get("file") else ""
+            print(f"{index}. [{finding['severity']}] {finding['location']}{file_info} -> {finding['problem']}")
             print(f"   Probable fix: {finding['probable_fix']}")
         if coverage_alerts:
             print(f"Detected {len(coverage_alerts)} coverage alert(s) below 75%.")
@@ -464,7 +628,7 @@ def main():
         print("No findings returned by reviewer.")
         if coverage_alerts:
             print(f"Detected {len(coverage_alerts)} coverage alert(s) below 75%.")
-    post_findings_to_github(findings, "" if parsed["ok"] and no_findings else review_comment, coverage_alerts)
+    post_findings_to_github(findings, "" if parsed["ok"] and no_findings else review_comment, coverage_alerts, pr_diff=pr_diff)
 
 if __name__ == "__main__":
     main()
