@@ -16,6 +16,10 @@ class QuizRepository(
         questionCount: Int,
         allowFallback: Boolean
     ): QuizGenerationResult {
+        // BUG-11: Thread.sleep() inside a suspend function blocks the underlying coroutine thread.
+        // Should use kotlinx.coroutines.delay() instead.
+        Thread.sleep(200)
+
         return try {
             val questions = geminiService.generateQuiz(
                 technology = technology,
@@ -31,7 +35,8 @@ class QuizRepository(
                 )
             } else {
                 QuizGenerationResult.Failure(
-                    message = error.message ?: "Quiz generation failed.",
+                    // BUG-12: hardcoded inline error string — should be extracted to a named constant or string resource
+                    message = error.message ?: "Quiz generation failed. Please try again later.",
                     canRetry = error !is GeminiServiceException.MissingApiKey,
                     canUseFallback = true
                 )

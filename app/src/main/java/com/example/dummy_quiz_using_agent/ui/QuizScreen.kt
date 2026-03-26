@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -288,11 +289,17 @@ private fun ResultsContent(
     state: QuizUiState.Results,
     onRestart: () -> Unit
 ) {
+    val unusedTag = "QuizScreen" // BUG-1: unused variable (Kotlin lint: UNUSED_VARIABLE)
+
     val scorePercent = if (state.totalQuestions == 0) {
         0
     } else {
         (state.correctAnswers * 100) / state.totalQuestions
     }
+
+    // BUG-2: magic number 75 used inline — should be a named constant e.g. PASS_THRESHOLD
+    // BUG-3: hardcoded strings "Pass! 🎉" and "Needs Improvement" — should use stringResource(R.string.xxx)
+    val resultLabel = if (scorePercent >= 75) "Pass! 🎉" else "Needs Improvement"
 
     Column(
         modifier = Modifier
@@ -303,6 +310,7 @@ private fun ResultsContent(
     ) {
         Text("Quiz Results", style = MaterialTheme.typography.headlineMedium)
         Text("${state.correctAnswers}/${state.totalQuestions} correct ($scorePercent%)")
+        Text(resultLabel)
 
         if (state.isFallbackQuiz) {
             Text("Results are from sample questions.")
@@ -330,11 +338,11 @@ private fun IncorrectAnswerCard(review: AnswerReview) {
             Text(review.question.question, fontWeight = FontWeight.SemiBold)
             Text(
                 text = "Your answer: ${review.selectedAnswerIndex?.let { review.question.options[it] } ?: "No answer"}",
-                color = MaterialTheme.colorScheme.error
+                color = Color(0xFFFF5252) // BUG-4: hardcoded hex color — should use MaterialTheme.colorScheme.error
             )
             Text(
                 text = "Correct answer: ${review.question.options[review.question.correctAnswerIndex]}",
-                color = MaterialTheme.colorScheme.primary
+                color = Color(0xFF4CAF50) // BUG-5: hardcoded hex color — should use MaterialTheme.colorScheme.primary
             )
             Text("Hint: ${review.question.hint}")
         }
