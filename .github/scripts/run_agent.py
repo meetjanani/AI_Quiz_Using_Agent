@@ -55,6 +55,7 @@ def _clean_review_comment_body(text):
 
 def fetch_recent_human_pr_review_comments(days=90, max_comments=120):
     if not (GH_TOKEN and REPO_NAME):
+        print("⚠️  GitHub token or repo name not set. Skipping historical review context.")
         return []
 
     headers = {
@@ -64,6 +65,7 @@ def fetch_recent_human_pr_review_comments(days=90, max_comments=120):
     since = _iso_utc_days_ago(days)
     comments = []
     page = 1
+    print(f"  📡 Querying GitHub API since {since}...")
 
     while len(comments) < max_comments:
         params = {
@@ -77,11 +79,11 @@ def fetch_recent_human_pr_review_comments(days=90, max_comments=120):
         try:
             resp = requests.get(url, headers=headers, params=params, timeout=30)
         except requests.RequestException as exc:
-            print(f"Failed fetching review history comments: {exc}")
+            print(f"  ❌ Failed fetching review history comments: {exc}")
             break
 
         if resp.status_code >= 300:
-            print(f"Failed fetching review history comments: {resp.status_code} {resp.text[:500]}")
+            print(f"  ❌ Failed fetching review history comments: {resp.status_code} {resp.text[:500]}")
             break
 
         page_data = resp.json()
@@ -123,6 +125,7 @@ def fetch_recent_human_pr_review_comments(days=90, max_comments=120):
             break
         page += 1
 
+    print(f"  ✓ Retrieved {len(comments)} human review comment(s) from {page} page(s).")
     return comments[:max_comments]
 
 
@@ -130,13 +133,29 @@ def maybe_collect_review_history_context():
     comments_file_content = read_optional_file("recent_pr_comments.txt").strip()
     max_chars = _safe_int(MAX_REVIEW_HISTORY_CHARS, 14000)
     if comments_file_content:
+        print("✓ Using cached recent_pr_comments.txt file for historical review context.")
         return comments_file_content[-max_chars:]
 
     days = _safe_int(REVIEW_HISTORY_DAYS, 90)
     max_comments = _safe_int(MAX_REVIEW_HISTORY_COMMENTS, 120)
+    print(f"\n📜 Fetching historical PR review comments from last {days} days (max {max_comments}, excluding {EXCLUDED_REVIEW_AUTHORS})...")
     comments = fetch_recent_human_pr_review_comments(days=days, max_comments=max_comments)
+
     if not comments:
+        print("  ℹ️ No historical comments found in the last {0} days.".format(days))
         return ""
+
+    print(f"✓ Fetched {len(comments)} historical review comment(s).")
+
+    # Display top 10 comments
+    top_count = min(10, len(comments))
+    print(f"\n📋 Top {top_count} most recent comments:\n")
+    for idx, comment in enumerate(comments[:10], start=1):
+        line_text = comment["line"] if comment["line"] is not None else "?"
+        created = comment.get("created_at", "")[:10] if comment.get("created_at") else "unknown-date"
+        print(f"  {idx}. [PR #{comment['pr']}] {comment['user']} ({created})")
+        print(f"     📍 {comment['path']}:{line_text}")
+        print(f"     💬 {comment['body'][:150]}{'...' if len(comment['body']) > 150 else ''}\n")
 
     lines = []
     for index, comment in enumerate(comments, start=1):
@@ -144,7 +163,9 @@ def maybe_collect_review_history_context():
         lines.append(
             f"{index}. [PR #{comment['pr']}] {comment['user']} @ {comment['path']}:{line_text} - {comment['body']}"
         )
-    return "\n".join(lines)[-max_chars:]
+    final_context = "\n".join(lines)[-max_chars:]
+    print(f"✓ Historical review context prepared ({len(final_context)} chars) for prompt.\n")
+    return final_context
 
 def _strip_code_fences(text):
     trimmed = text.strip()
