@@ -4,11 +4,20 @@ import re
 import subprocess
 import xml.etree.ElementTree as ET
 import glob
+from datetime import datetime, timedelta, timezone
 
 API_KEY = os.environ.get("LLM_API_KEY")
 GH_TOKEN = os.environ.get("GH_TOKEN")
 PR_NUMBER = os.environ.get("PR_NUMBER")
 REPO_NAME = os.environ.get("REPO_NAME")
+REVIEW_HISTORY_DAYS = os.environ.get("REVIEW_HISTORY_DAYS", "90")
+MAX_REVIEW_HISTORY_COMMENTS = os.environ.get("MAX_REVIEW_HISTORY_COMMENTS", "120")
+MAX_REVIEW_HISTORY_CHARS = os.environ.get("MAX_REVIEW_HISTORY_CHARS", "14000")
+EXCLUDED_REVIEW_AUTHORS = {
+    author.strip().lower()
+    for author in os.environ.get("EXCLUDED_REVIEW_AUTHORS", "github-actions[bot]").split(",")
+    if author.strip()
+}
 
 LLM_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
@@ -21,6 +30,121 @@ def read_optional_file(filepath):
         return read_file(filepath)
     except FileNotFoundError:
         return ""
+
+
+def _safe_int(value, default_value):
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return default_value
+
+
+def _iso_utc_days_ago(days):
+    now_utc = datetime.now(timezone.utc)
+    cutoff = now_utc - timedelta(days=max(1, days))
+    return cutoff.replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _clean_review_comment_body(text):
+    if not text:
+        return ""
+    # Keep prompt compact while preserving intent from human review comments.
+    compact = re.sub(r"\s+", " ", text).strip()
+    return compact[:1200]
+
+
+def fetch_recent_human_pr_review_comments(days=90, max_comments=120):
+    if not (GH_TOKEN and REPO_NAME):
+        return []
+
+    headers = {
+        "Authorization": f"token {GH_TOKEN}",
+        "Accept": "application/vnd.github+json",
+    }
+    since = _iso_utc_days_ago(days)
+    comments = []
+    page = 1
+
+    while len(comments) < max_comments:
+        params = {
+            "per_page": 100,
+            "page": page,
+            "sort": "created",
+            "direction": "desc",
+            "since": since,
+        }
+        url = f"https://api.github.com/repos/{REPO_NAME}/pulls/comments"
+        try:
+            resp = requests.get(url, headers=headers, params=params, timeout=30)
+        except requests.RequestException as exc:
+            print(f"Failed fetching review history comments: {exc}")
+            break
+
+        if resp.status_code >= 300:
+            print(f"Failed fetching review history comments: {resp.status_code} {resp.text[:500]}")
+            break
+
+        page_data = resp.json()
+        if not isinstance(page_data, list) or not page_data:
+            break
+
+        for item in page_data:
+            user_login = ((item.get("user") or {}).get("login") or "").strip()
+            if not user_login:
+                continue
+            if user_login.lower() in EXCLUDED_REVIEW_AUTHORS:
+                continue
+
+            body = _clean_review_comment_body(item.get("body", ""))
+            if not body:
+                continue
+
+            pr_url = item.get("pull_request_url", "")
+            pr_number = pr_url.rstrip("/").split("/")[-1] if pr_url else "?"
+            path = item.get("path") or "unknown-file"
+            line = item.get("line")
+            if line is None:
+                line = item.get("original_line")
+
+            comments.append(
+                {
+                    "user": user_login,
+                    "pr": pr_number,
+                    "path": path,
+                    "line": line,
+                    "body": body,
+                    "created_at": item.get("created_at", ""),
+                }
+            )
+            if len(comments) >= max_comments:
+                break
+
+        if len(page_data) < 100:
+            break
+        page += 1
+
+    return comments[:max_comments]
+
+
+def maybe_collect_review_history_context():
+    comments_file_content = read_optional_file("recent_pr_comments.txt").strip()
+    max_chars = _safe_int(MAX_REVIEW_HISTORY_CHARS, 14000)
+    if comments_file_content:
+        return comments_file_content[-max_chars:]
+
+    days = _safe_int(REVIEW_HISTORY_DAYS, 90)
+    max_comments = _safe_int(MAX_REVIEW_HISTORY_COMMENTS, 120)
+    comments = fetch_recent_human_pr_review_comments(days=days, max_comments=max_comments)
+    if not comments:
+        return ""
+
+    lines = []
+    for index, comment in enumerate(comments, start=1):
+        line_text = comment["line"] if comment["line"] is not None else "?"
+        lines.append(
+            f"{index}. [PR #{comment['pr']}] {comment['user']} @ {comment['path']}:{line_text} - {comment['body']}"
+        )
+    return "\n".join(lines)[-max_chars:]
 
 def _strip_code_fences(text):
     trimmed = text.strip()
@@ -530,6 +654,7 @@ def main():
         return
 
     lint_context = maybe_collect_lint_context()
+    historical_review_context = maybe_collect_review_history_context()
 
     print("Sending code to Gemini Agent for review-only findings...")
 
@@ -538,6 +663,7 @@ def main():
         "You are locked in Review mode. Do NOT generate <file_update> blocks and do NOT propose auto-edits in raw file form.\n"
         "Check specifically for Android lint rules, Kotlin lint/style, magic numbers, hardcoded static values (String/Int/Float/Double), formatting, maintainability, and correctness regressions.\n"
         "If hardcoded values are found, recommend BuildConfig first when semantically appropriate; otherwise recommend the correct resource XML file.\n\n"
+        "Use any provided historical PR comments as soft project conventions. Follow them only when they do not conflict with correctness, security, or lint quality.\n\n"
         "IMPORTANT — Inline comment placement:\n"
         "  • For every finding, you MUST provide the exact <file> path (relative to repo root, e.g. app/src/main/java/com/example/Foo.kt)\n"
         "    and the exact <line> number (integer) of the problematic line as it appears in the NEW version of the file shown in the diff.\n"
@@ -562,6 +688,12 @@ def main():
     user_prompt = f"Here is the git diff:\n\n```diff\n{pr_diff}\n```"
     if lint_context.strip():
         user_prompt += f"\n\nOptional lint context (may include warnings/errors):\n\n```text\n{lint_context}\n```"
+    if historical_review_context.strip():
+        user_prompt += (
+            "\n\nHistorical PR review comments from the last months (human reviewers only; bots excluded). "
+            "Use this as project-specific review style/context:\n\n"
+            f"```text\n{historical_review_context}\n```"
+        )
 
     headers = {
         "Content-Type": "application/json",
