@@ -13,6 +13,7 @@ REPO_NAME = os.environ.get("REPO_NAME")
 REVIEW_HISTORY_DAYS = os.environ.get("REVIEW_HISTORY_DAYS", "90")
 MAX_REVIEW_HISTORY_COMMENTS = os.environ.get("MAX_REVIEW_HISTORY_COMMENTS", "120")
 MAX_REVIEW_HISTORY_CHARS = os.environ.get("MAX_REVIEW_HISTORY_CHARS", "14000")
+MAX_REVIEW_HISTORY_PRS = os.environ.get("MAX_REVIEW_HISTORY_PRS", "80")
 EXCLUDED_REVIEW_AUTHORS = {
     author.strip().lower()
     for author in os.environ.get("EXCLUDED_REVIEW_AUTHORS", "github-actions[bot]").split(",")
@@ -53,7 +54,82 @@ def _clean_review_comment_body(text):
     return compact[:1200]
 
 
-def fetch_recent_human_pr_review_comments(days=90, max_comments=120):
+def _parse_iso8601_utc(value):
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
+
+def _is_allowed_author(login):
+    if not login:
+        return False
+    return login.strip().lower() not in EXCLUDED_REVIEW_AUTHORS
+
+
+def _append_history_comment(comments, item, max_comments):
+    if len(comments) >= max_comments:
+        return
+    comments.append(item)
+
+
+def fetch_recent_pr_numbers(days=90, max_prs=80):
+    if not (GH_TOKEN and REPO_NAME):
+        return []
+
+    headers = {
+        "Authorization": f"token {GH_TOKEN}",
+        "Accept": "application/vnd.github+json",
+    }
+    cutoff_dt = datetime.now(timezone.utc) - timedelta(days=max(1, days))
+    page = 1
+    pr_numbers = []
+    stop_paging = False
+
+    while len(pr_numbers) < max_prs and not stop_paging:
+        params = {
+            "state": "all",
+            "sort": "updated",
+            "direction": "desc",
+            "per_page": 100,
+            "page": page,
+        }
+        url = f"https://api.github.com/repos/{REPO_NAME}/pulls"
+        try:
+            resp = requests.get(url, headers=headers, params=params, timeout=30)
+        except requests.RequestException as exc:
+            print(f"  ❌ Failed fetching PR list: {exc}")
+            break
+
+        if resp.status_code >= 300:
+            print(f"  ❌ Failed fetching PR list: {resp.status_code} {resp.text[:500]}")
+            break
+
+        page_data = resp.json()
+        if not isinstance(page_data, list) or not page_data:
+            break
+
+        for pr in page_data:
+            updated_at = _parse_iso8601_utc(pr.get("updated_at"))
+            if updated_at and updated_at < cutoff_dt:
+                stop_paging = True
+                break
+
+            number = pr.get("number")
+            if number is None:
+                continue
+            pr_numbers.append(str(number))
+            if len(pr_numbers) >= max_prs:
+                break
+
+        page += 1
+
+    return pr_numbers[:max_prs]
+
+
+def fetch_recent_human_pr_review_comments(days=90, max_comments=120, max_prs=80):
     if not (GH_TOKEN and REPO_NAME):
         print("⚠️  GitHub token or repo name not set. Skipping historical review context.")
         return []
@@ -63,69 +139,133 @@ def fetch_recent_human_pr_review_comments(days=90, max_comments=120):
         "Accept": "application/vnd.github+json",
     }
     since = _iso_utc_days_ago(days)
+    since_dt = _parse_iso8601_utc(since)
     comments = []
-    page = 1
     print(f"  📡 Querying GitHub API since {since}...")
 
-    while len(comments) < max_comments:
-        params = {
-            "per_page": 100,
-            "page": page,
-            "sort": "created",
-            "direction": "desc",
-            "since": since,
-        }
-        url = f"https://api.github.com/repos/{REPO_NAME}/pulls/comments"
+    pr_numbers = fetch_recent_pr_numbers(days=days, max_prs=max_prs)
+    if not pr_numbers:
+        print("  ℹ️ No PRs found in lookback window for historical review context.")
+        return []
+
+    print(f"  ✓ Candidate PRs in lookback window: {len(pr_numbers)}")
+
+    for pr in pr_numbers:
+        if len(comments) >= max_comments:
+            break
+
+        # 1) General PR conversation comments (issue comments on PR)
+        issue_comments_url = f"https://api.github.com/repos/{REPO_NAME}/issues/{pr}/comments"
         try:
-            resp = requests.get(url, headers=headers, params=params, timeout=30)
-        except requests.RequestException as exc:
-            print(f"  ❌ Failed fetching review history comments: {exc}")
+            issue_resp = requests.get(issue_comments_url, headers=headers, params={"per_page": 100}, timeout=30)
+            issue_data = issue_resp.json() if issue_resp.status_code < 300 else []
+        except requests.RequestException:
+            issue_data = []
+
+        if isinstance(issue_data, list):
+            for item in reversed(issue_data):
+                created = _parse_iso8601_utc(item.get("created_at"))
+                if since_dt and created and created < since_dt:
+                    continue
+                user_login = ((item.get("user") or {}).get("login") or "").strip()
+                if not _is_allowed_author(user_login):
+                    continue
+                body = _clean_review_comment_body(item.get("body", ""))
+                if not body:
+                    continue
+                _append_history_comment(
+                    comments,
+                    {
+                        "user": user_login,
+                        "pr": pr,
+                        "path": "PR_CONVERSATION",
+                        "line": None,
+                        "body": body,
+                        "created_at": item.get("created_at", ""),
+                    },
+                    max_comments,
+                )
+                if len(comments) >= max_comments:
+                    break
+
+        if len(comments) >= max_comments:
             break
 
-        if resp.status_code >= 300:
-            print(f"  ❌ Failed fetching review history comments: {resp.status_code} {resp.text[:500]}")
+        # 2) Review summary comments (Approve/Request changes/Comment review body)
+        reviews_url = f"https://api.github.com/repos/{REPO_NAME}/pulls/{pr}/reviews"
+        try:
+            reviews_resp = requests.get(reviews_url, headers=headers, params={"per_page": 100}, timeout=30)
+            reviews_data = reviews_resp.json() if reviews_resp.status_code < 300 else []
+        except requests.RequestException:
+            reviews_data = []
+
+        if isinstance(reviews_data, list):
+            for item in reversed(reviews_data):
+                submitted = _parse_iso8601_utc(item.get("submitted_at"))
+                if since_dt and submitted and submitted < since_dt:
+                    continue
+                user_login = ((item.get("user") or {}).get("login") or "").strip()
+                if not _is_allowed_author(user_login):
+                    continue
+                body = _clean_review_comment_body(item.get("body", ""))
+                if not body:
+                    continue
+                _append_history_comment(
+                    comments,
+                    {
+                        "user": user_login,
+                        "pr": pr,
+                        "path": "PR_REVIEW_SUMMARY",
+                        "line": None,
+                        "body": body,
+                        "created_at": item.get("submitted_at", ""),
+                    },
+                    max_comments,
+                )
+                if len(comments) >= max_comments:
+                    break
+
+        if len(comments) >= max_comments:
             break
 
-        page_data = resp.json()
-        if not isinstance(page_data, list) or not page_data:
-            break
+        # 3) Inline file-level review comments
+        inline_comments_url = f"https://api.github.com/repos/{REPO_NAME}/pulls/{pr}/comments"
+        try:
+            inline_resp = requests.get(inline_comments_url, headers=headers, params={"per_page": 100}, timeout=30)
+            inline_data = inline_resp.json() if inline_resp.status_code < 300 else []
+        except requests.RequestException:
+            inline_data = []
 
-        for item in page_data:
-            user_login = ((item.get("user") or {}).get("login") or "").strip()
-            if not user_login:
-                continue
-            if user_login.lower() in EXCLUDED_REVIEW_AUTHORS:
-                continue
+        if isinstance(inline_data, list):
+            for item in reversed(inline_data):
+                created = _parse_iso8601_utc(item.get("created_at"))
+                if since_dt and created and created < since_dt:
+                    continue
+                user_login = ((item.get("user") or {}).get("login") or "").strip()
+                if not _is_allowed_author(user_login):
+                    continue
+                body = _clean_review_comment_body(item.get("body", ""))
+                if not body:
+                    continue
+                line = item.get("line")
+                if line is None:
+                    line = item.get("original_line")
+                _append_history_comment(
+                    comments,
+                    {
+                        "user": user_login,
+                        "pr": pr,
+                        "path": item.get("path") or "unknown-file",
+                        "line": line,
+                        "body": body,
+                        "created_at": item.get("created_at", ""),
+                    },
+                    max_comments,
+                )
+                if len(comments) >= max_comments:
+                    break
 
-            body = _clean_review_comment_body(item.get("body", ""))
-            if not body:
-                continue
-
-            pr_url = item.get("pull_request_url", "")
-            pr_number = pr_url.rstrip("/").split("/")[-1] if pr_url else "?"
-            path = item.get("path") or "unknown-file"
-            line = item.get("line")
-            if line is None:
-                line = item.get("original_line")
-
-            comments.append(
-                {
-                    "user": user_login,
-                    "pr": pr_number,
-                    "path": path,
-                    "line": line,
-                    "body": body,
-                    "created_at": item.get("created_at", ""),
-                }
-            )
-            if len(comments) >= max_comments:
-                break
-
-        if len(page_data) < 100:
-            break
-        page += 1
-
-    print(f"  ✓ Retrieved {len(comments)} human review comment(s) from {page} page(s).")
+    print(f"  ✓ Retrieved {len(comments)} human review comment(s) from last {days} day(s).")
     return comments[:max_comments]
 
 
@@ -138,8 +278,9 @@ def maybe_collect_review_history_context():
 
     days = _safe_int(REVIEW_HISTORY_DAYS, 90)
     max_comments = _safe_int(MAX_REVIEW_HISTORY_COMMENTS, 120)
-    print(f"\n📜 Fetching historical PR review comments from last {days} days (max {max_comments}, excluding {EXCLUDED_REVIEW_AUTHORS})...")
-    comments = fetch_recent_human_pr_review_comments(days=days, max_comments=max_comments)
+    max_prs = _safe_int(MAX_REVIEW_HISTORY_PRS, 80)
+    print(f"\n📜 Fetching historical PR review comments from last {days} days (max comments {max_comments}, max PRs {max_prs}, excluding {EXCLUDED_REVIEW_AUTHORS})...")
+    comments = fetch_recent_human_pr_review_comments(days=days, max_comments=max_comments, max_prs=max_prs)
 
     if not comments:
         print("  ℹ️ No historical comments found in the last {0} days.".format(days))
@@ -711,7 +852,7 @@ def main():
         user_prompt += f"\n\nOptional lint context (may include warnings/errors):\n\n```text\n{lint_context}\n```"
     if historical_review_context.strip():
         user_prompt += (
-            "\n\nHistorical PR review comments from the last months (human reviewers only; bots excluded). "
+            "\n\nHistorical PR review comments from the last 3 months (human reviewers only; bots excluded). "
             "Use this as project-specific review style/context:\n\n"
             f"```text\n{historical_review_context}\n```"
         )

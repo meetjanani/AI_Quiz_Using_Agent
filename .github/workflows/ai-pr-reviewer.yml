@@ -58,6 +58,7 @@ jobs:
           REPO_NAME: ${{ github.repository }}
           RUN_TEST_COVERAGE: "true"
           REVIEW_HISTORY_DAYS: "90"
+          MAX_REVIEW_HISTORY_PRS: "80"
           MAX_REVIEW_HISTORY_COMMENTS: "120"
           MAX_REVIEW_HISTORY_CHARS: "14000"
           EXCLUDED_REVIEW_AUTHORS: "github-actions[bot]"
