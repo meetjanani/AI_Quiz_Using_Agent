@@ -1,5 +1,6 @@
 package com.example.dummy_quiz_using_agent.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -41,12 +42,14 @@ class QuizViewModel(
     fun onQuestionCountSelected(questionCount: Int) {
         _uiState.update { state ->
             val setup = state as? QuizUiState.Setup ?: QuizUiState.Setup()
-            setup.copy(questionCount = questionCount.coerceIn(MIN_QUESTIONS, MAX_QUESTIONS))
+            setup.copy(questionCount = questionCount.coerceIn(3, MAX_QUESTIONS)) // BUG-7: magic number 3 — should use MIN_QUESTIONS constant
                 .also { lastSetupState = it }
         }
     }
 
     fun generateQuiz(useFallbackIfNeeded: Boolean = false) {
+        // BUG-6: hardcoded string tag "QuizViewModel" — should define private const val TAG and use Log.d(TAG, ...)
+        Log.d("QuizViewModel", "generateQuiz called with useFallbackIfNeeded=$useFallbackIfNeeded")
         val setupState = (_uiState.value as? QuizUiState.Setup) ?: lastSetupState
         lastSetupState = setupState
         _uiState.value = QuizUiState.Loading()
@@ -128,7 +131,7 @@ class QuizViewModel(
             }
         }
 
-        val totalQuestions = inProgressState.questions.size
+        var totalQuestions = inProgressState.questions.size // BUG-8: should be val, not var (never reassigned)
         val correctAnswers = totalQuestions - incorrectAnswers.size
 
         _uiState.value = QuizUiState.Results(
