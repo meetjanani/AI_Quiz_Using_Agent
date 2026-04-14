@@ -76,6 +76,40 @@ def _append_history_comment(comments, item, max_comments):
     comments.append(item)
 
 
+def print_github_rate_limit(label=""):
+    """Fetch and print the current GitHub API core rate limit quota."""
+    if not GH_TOKEN:
+        print("  ⚠️  GH_TOKEN not set — cannot check rate limit.")
+        return
+    headers = {
+        "Authorization": f"token {GH_TOKEN}",
+        "Accept": "application/vnd.github+json",
+    }
+    try:
+        resp = requests.get("https://api.github.com/rate_limit", headers=headers, timeout=10)
+        if resp.status_code != 200:
+            print(f"  ⚠️  Rate limit check failed: HTTP {resp.status_code}")
+            return
+        core = resp.json().get("rate", {})
+        limit     = core.get("limit", "?")
+        used      = core.get("used", "?")
+        remaining = core.get("remaining", "?")
+        reset_ts  = core.get("reset")
+        if reset_ts:
+            reset_str = datetime.fromtimestamp(reset_ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        else:
+            reset_str = "?"
+        tag = f" [{label}]" if label else ""
+        print(
+            f"📊 GitHub API Rate Limit{tag}: "
+            f"limit={limit}  used={used}  remaining={remaining}  resets_at={reset_str}"
+        )
+        if isinstance(remaining, int) and remaining < 200:
+            print(f"  ⚠️  Only {remaining} API calls remaining — risk of hitting quota!")
+    except Exception as exc:
+        print(f"  ⚠️  Could not fetch rate limit: {exc}")
+
+
 def fetch_recent_pr_numbers(days=90, max_prs=80):
     if not (GH_TOKEN and REPO_NAME):
         return []
@@ -142,6 +176,7 @@ def fetch_recent_human_pr_review_comments(days=90, max_comments=120, max_prs=80)
     since = _iso_utc_days_ago(days)
     since_dt = _parse_iso8601_utc(since)
     comments = []
+    print_github_rate_limit("before history fetch")
     print(f"  📡 Querying GitHub API since {since}...")
 
     pr_numbers = fetch_recent_pr_numbers(days=days, max_prs=max_prs)
@@ -275,8 +310,24 @@ def maybe_collect_review_history_context():
     comments_file_content = read_optional_file("recent_pr_comments.txt").strip()
     max_chars = _safe_int(MAX_REVIEW_HISTORY_CHARS, 14000)
     if comments_file_content and not ignore_cached:
-        print("✓ Using cached recent_pr_comments.txt file for historical review context.")
-        return comments_file_content[-max_chars:]
+        all_lines = comments_file_content.splitlines()
+        used_content = comments_file_content[-max_chars:]
+        used_lines = used_content.splitlines()
+        print(
+            f"✓ Using cached recent_pr_comments.txt file for historical review context. "
+            f"({len(comments_file_content)} chars total, {len(all_lines)} lines — "
+            f"passing last {len(used_lines)} lines / {len(used_content)} chars to prompt)"
+        )
+        top_preview = min(10, len(used_lines))
+        if top_preview > 0:
+            print(f"\n📋 Cache preview — top {top_preview} line(s):\n")
+            for idx, line in enumerate(used_lines[:top_preview], start=1):
+                preview = line[:200] + ("..." if len(line) > 200 else "")
+                print(f"  {idx:>3}. {preview}")
+            print()
+        else:
+            print("  ⚠️  recent_pr_comments.txt exists but is effectively empty after stripping.")
+        return used_content
 
     days = _safe_int(REVIEW_HISTORY_DAYS, 90)
     max_comments = _safe_int(MAX_REVIEW_HISTORY_COMMENTS, 120)
@@ -701,6 +752,7 @@ def post_findings_to_github(findings, fallback_comment, coverage_alerts=None, pr
         "Authorization": f"token {GH_TOKEN}",
         "Accept": "application/vnd.github+json",
     }
+    print_github_rate_limit("before posting findings")
     issues_url  = f"https://api.github.com/repos/{REPO_NAME}/issues/{PR_NUMBER}/comments"
     reviews_url = f"https://api.github.com/repos/{REPO_NAME}/pulls/{PR_NUMBER}/reviews"
 
@@ -896,6 +948,14 @@ def main():
             "Use this as project-specific review style/context:\n\n"
             f"```text\n{historical_review_context}\n```"
         )
+
+    print("::group::Gemini system_instruction")
+    print(system_instruction)
+    print("::endgroup::")
+
+    print("::group::Gemini user_prompt")
+    print(user_prompt)
+    print("::endgroup::")
 
     headers = {
         "Content-Type": "application/json",
