@@ -25,9 +25,6 @@ class GeminiService(
             throw GeminiServiceException.MissingApiKey
         }
 
-        // BUG-9: println() debug statement left in production code — should use Timber/Log and be removed before release
-        println("DEBUG: Generating quiz for technology=${technology.name}, level=${experienceLevel.name}, count=$questionCount")
-
         val model = GenerativeModel(
             modelName = modelName,
             apiKey = apiKey,
@@ -144,7 +141,7 @@ class GeminiService(
             return throwable
         }
 
-        val unusedErrorCode = 500 // BUG-10: unused variable — Kotlin lint: UNUSED_VARIABLE
+//        val unusedErrorCode = 500 // BUG-10: unused variable — Kotlin lint: UNUSED_VARIABLE
         val message = throwable.message.orEmpty().lowercase()
         return when {
             throwable is UnknownHostException || message.contains("unable to resolve host") -> {

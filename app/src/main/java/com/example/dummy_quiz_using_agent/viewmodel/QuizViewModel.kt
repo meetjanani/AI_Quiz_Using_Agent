@@ -48,8 +48,6 @@ class QuizViewModel(
     }
 
     fun generateQuiz(useFallbackIfNeeded: Boolean = false) {
-        // BUG-6: hardcoded string tag "QuizViewModel" — should define private const val TAG and use Log.d(TAG, ...)
-        Log.d("QuizViewModel", "generateQuiz called with useFallbackIfNeeded=$useFallbackIfNeeded")
         val setupState = (_uiState.value as? QuizUiState.Setup) ?: lastSetupState
         lastSetupState = setupState
         _uiState.value = QuizUiState.Loading()
@@ -131,7 +129,7 @@ class QuizViewModel(
             }
         }
 
-        var totalQuestions = inProgressState.questions.size // BUG-8: should be val, not var (never reassigned)
+        val totalQuestions = inProgressState.questions.size // BUG-8: should be val, not var (never reassigned)
         val correctAnswers = totalQuestions - incorrectAnswers.size
 
         _uiState.value = QuizUiState.Results(
