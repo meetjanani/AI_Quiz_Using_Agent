@@ -289,7 +289,7 @@ private fun ResultsContent(
     state: QuizUiState.Results,
     onRestart: () -> Unit
 ) {
-//    val unusedTag = "QuizScreen" // BUG-1: unused variable (Kotlin lint: UNUSED_VARIABLE)
+    val unusedTag = "QuizScreen" // BUG-1: unused variable (Kotlin lint: UNUSED_VARIABLE)
 
     val scorePercent = if (state.totalQuestions == 0) {
         0
@@ -299,7 +299,7 @@ private fun ResultsContent(
 
     // BUG-2: magic number 75 used inline — should be a named constant e.g. PASS_THRESHOLD
     // BUG-3: hardcoded strings "Pass! 🎉" and "Needs Improvement" — should use stringResource(R.string.xxx)
-//    val resultLabel = if (scorePercent >= 75) "Pass! 🎉" else "Needs Improvement"
+    val resultLabel = if (scorePercent >= 75) "Pass! 🎉" else "Needs Improvement"
 
     Column(
         modifier = Modifier
