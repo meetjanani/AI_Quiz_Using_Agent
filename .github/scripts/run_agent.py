@@ -1,4 +1,5 @@
 import os
+import json
 import requests
 import re
 import subprocess
@@ -270,9 +271,10 @@ def fetch_recent_human_pr_review_comments(days=90, max_comments=120, max_prs=80)
 
 
 def maybe_collect_review_history_context():
+    ignore_cached = os.environ.get("IGNORE_CACHED_REVIEW_HISTORY", "false").lower() == "true"
     comments_file_content = read_optional_file("recent_pr_comments.txt").strip()
     max_chars = _safe_int(MAX_REVIEW_HISTORY_CHARS, 14000)
-    if comments_file_content:
+    if comments_file_content and not ignore_cached:
         print("✓ Using cached recent_pr_comments.txt file for historical review context.")
         return comments_file_content[-max_chars:]
 
@@ -307,6 +309,39 @@ def maybe_collect_review_history_context():
     final_context = "\n".join(lines)[-max_chars:]
     print(f"✓ Historical review context prepared ({len(final_context)} chars) for prompt.\n")
     return final_context
+
+
+def run_review_history_fetch_only():
+    days = _safe_int(REVIEW_HISTORY_DAYS, 90)
+    max_comments = _safe_int(MAX_REVIEW_HISTORY_COMMENTS, 120)
+    max_prs = _safe_int(MAX_REVIEW_HISTORY_PRS, 80)
+    output_file = os.environ.get("REVIEW_HISTORY_OUTPUT_FILE", "recent_pr_comments.txt")
+    metadata_file = os.environ.get("REVIEW_HISTORY_METADATA_FILE", "review_history_meta.json")
+
+    print("Starting standalone review-history fetch mode...")
+    context = maybe_collect_review_history_context()
+
+    with open(output_file, "w") as f:
+        f.write(context)
+        if context and not context.endswith("\n"):
+            f.write("\n")
+
+    metadata = {
+        "generated_at_utc": datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "repo": REPO_NAME or "",
+        "days": days,
+        "max_prs": max_prs,
+        "max_comments": max_comments,
+        "excluded_authors": sorted(EXCLUDED_REVIEW_AUTHORS),
+        "context_chars": len(context),
+        "context_lines": len(context.splitlines()) if context else 0,
+        "has_context": bool(context.strip()),
+    }
+    with open(metadata_file, "w") as f:
+        json.dump(metadata, f, indent=2)
+
+    print(f"✓ Wrote review history context to {output_file} ({metadata['context_chars']} chars)")
+    print(f"✓ Wrote review history metadata to {metadata_file}")
 
 def _strip_code_fences(text):
     trimmed = text.strip()
@@ -799,6 +834,11 @@ def post_findings_to_github(findings, fallback_comment, coverage_alerts=None, pr
             print(f"Failed posting fallback finding {idx}: {resp.status_code} {resp.text}")
 
 def main():
+    run_mode = os.environ.get("RUN_MODE", "").strip().lower()
+    if run_mode == "fetch_review_history":
+        run_review_history_fetch_only()
+        return
+
     if not API_KEY:
         print("Error: LLM_API_KEY is missing.")
         return
@@ -865,7 +905,7 @@ def main():
     payload = {
         "systemInstruction": {"parts": [{"text": system_instruction}]},
         "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
-        "generationConfig": {"temperature": 0.1}
+        "generationConfig": {"temperature": 0.3}
     }
 
     try:

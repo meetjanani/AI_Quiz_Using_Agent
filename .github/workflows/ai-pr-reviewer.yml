@@ -9,7 +9,48 @@ permissions:
   contents: read
 
 jobs:
+  fetch-review-history:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: pip install requests
+
+      - name: Fetch recent manual PR review history (standalone)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_NAME: ${{ github.repository }}
+          REVIEW_HISTORY_DAYS: "90"
+          MAX_REVIEW_HISTORY_PRS: "80"
+          MAX_REVIEW_HISTORY_COMMENTS: "120"
+          MAX_REVIEW_HISTORY_CHARS: "14000"
+          EXCLUDED_REVIEW_AUTHORS: "github-actions[bot]"
+          RUN_MODE: "fetch_review_history"
+          IGNORE_CACHED_REVIEW_HISTORY: "true"
+          REVIEW_HISTORY_OUTPUT_FILE: "recent_pr_comments.txt"
+          REVIEW_HISTORY_METADATA_FILE: "review_history_meta.json"
+        run: python .github/scripts/run_agent.py
+
+      - name: Upload review history artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: review-history-context
+          path: |
+            recent_pr_comments.txt
+            review_history_meta.json
+          if-no-files-found: error
+
   ai-code-review:
+    needs: fetch-review-history
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -48,6 +89,12 @@ jobs:
       - name: Collect Android lint context (non-blocking)
         run: |
           ./gradlew :app:lintDebug --console=plain > lint_output.txt 2>&1 || true
+
+      - name: Download review history artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: review-history-context
+          path: .
 
       - name: Run AI Master Reviewer
         env:
