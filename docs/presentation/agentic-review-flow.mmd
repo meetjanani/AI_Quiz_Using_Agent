@@ -1,0 +1,31 @@
+flowchart LR
+    A[Developer opens or updates PR] --> B[GitHub Action starts]
+    B --> C[Checkout repository]
+    C --> D[Generate pr_diff.patch]
+    D --> E[Run unit tests + coverage]
+    D --> F[Run Android lint]
+    E --> G[Coverage context]
+    F --> H[Lint context]
+    G --> I[run_agent.py orchestrator]
+    H --> I
+    D --> I
+
+    I --> J[Master Reviewer Agent]
+    J --> K[Architecture / Logic Agent]
+    J --> L[Compose UI Agent]
+    J --> M[Security / Config Agent]
+    J --> N[Test / QA Agent]
+
+    K --> O[Structured XML findings]
+    L --> O
+    M --> O
+    N --> O
+
+    O --> P[Parse file + line + severity]
+    P --> Q[Map findings to changed diff lines]
+    Q --> R[Create inline GitHub PR review comments]
+    G --> S[Coverage alert comments for logic files]
+    R --> T[Developer fixes issues]
+    S --> T
+    T --> U[Human reviewer focuses on higher-value review]
+
