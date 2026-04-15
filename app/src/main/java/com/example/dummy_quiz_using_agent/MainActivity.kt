@@ -1,6 +1,7 @@
 package com.example.dummy_quiz_using_agent
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -18,7 +19,7 @@ class MainActivity : ComponentActivity() {
 
     private val repository: QuizRepository by lazy {
         QuizRepository(
-            geminiService = GeminiService(apiKey = "API_Key")
+            geminiService = GeminiService(apiKey = "API_Key hard coded value")
         )
     }
 
@@ -29,6 +30,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // BUG 1: Hardcoded log tag — should be a companion object TAG constant
+        Log.d("MainActivityDebug", "onCreate called")
+
+        // BUG 2: Magic number — 5000 should be a named constant e.g. QUIZ_TIMEOUT_MS
+        val timeoutMs = 5000
+
+        // BUG 3: Hardcoded welcome string — should be in strings.xml
+        val welcomeMessage = "Welcome to the Quiz App!"
+
         setContent {
             Dummy_Quiz_Using_AgentTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
