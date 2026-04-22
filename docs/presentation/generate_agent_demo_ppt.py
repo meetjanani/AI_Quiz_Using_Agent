@@ -1,6 +1,35 @@
-from pathlib import Path
-from textwrap import wrap
+"""
+generate_agent_demo_ppt.py
+--------------------------
+Generates a polished PPTX deck + flow diagram for the
+Agentic AI Code Review Demo presentation.
 
+Run from repo root:
+    python docs/presentation/generate_agent_demo_ppt.py
+
+Dependencies are installed automatically if missing.
+Or install manually:
+    pip install python-pptx Pillow
+"""
+
+import subprocess
+import sys
+
+# ── Auto-install missing dependencies ────────────────────────────────────────
+
+def _ensure(*packages):
+    for pkg in packages:
+        try:
+            __import__(pkg.replace("-", "_").split("[")[0])
+        except ImportError:
+            print(f"Installing {pkg} …")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", pkg])
+
+_ensure("python-pptx", "Pillow")
+
+# ── Imports (after install guard) ─────────────────────────────────────────────
+
+from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from pptx import Presentation
 from pptx.dml.color import RGBColor
@@ -8,483 +37,503 @@ from pptx.enum.shapes import MSO_AUTO_SHAPE_TYPE
 from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches, Pt
 
-ROOT = Path(__file__).resolve().parent
-PPTX_PATH = ROOT / "Agentic_AI_Code_Review_Demo.pptx"
-DIAGRAM_PATH = ROOT / "agentic-review-flow.png"
+# ── Paths ────────────────────────────────────────────────────────────────────
 
-PRIMARY = RGBColor(14, 44, 84)
-ACCENT = RGBColor(0, 129, 167)
-SUCCESS = RGBColor(44, 120, 87)
-TEXT = RGBColor(34, 34, 34)
-MUTED = RGBColor(90, 90, 90)
-BG = RGBColor(248, 250, 252)
-LIGHT = RGBColor(229, 238, 246)
-WHITE = RGBColor(255, 255, 255)
+ROOT       = Path(__file__).resolve().parent
+PPTX_PATH  = ROOT / "Agentic_AI_Code_Review_Demo.pptx"
+DIAG_PATH  = ROOT / "agentic-review-flow.png"
 
+# ── Colour palette ────────────────────────────────────────────────────────────
+
+PRIMARY = RGBColor(14,  44,  84)   # dark navy
+ACCENT  = RGBColor(0,  129, 167)   # teal
+SUCCESS = RGBColor(44, 120,  87)   # green
+TEXT    = RGBColor(34,  34,  34)
+MUTED   = RGBColor(100, 100, 100)
+BG      = RGBColor(248, 250, 252)  # near-white page
+LIGHT   = RGBColor(229, 238, 246)  # callout fill
+WHITE   = RGBColor(255, 255, 255)
+
+# ── Slide definitions ────────────────────────────────────────────────────────
 
 SLIDES = [
+    # 1 — Title
     {
+        "type": "title",
         "title": "Agentic AI for Android PR Reviews",
-        "subtitle": "From static checks to workflow-aware review comments in GitHub",
-        "footer": "Demo pack generated from this project's current GitHub Action + review-agent design",
+        "subtitle": "Automated, context-aware code review — commented directly on GitHub",
+        "footer":   "Built on Gemini 2.5 Flash · GitHub Actions · Python · MVVM Android project",
     },
+    # 2 — Problem
     {
-        "title": "Problem We Are Solving",
+        "type": "bullets",
+        "title": "The Problem",
         "bullets": [
-            "Manual PR review is high-value but repetitive: lint, hardcoded values, architecture drift, security checks, and test quality.",
-            "Important issues are often found late, after reviewer time is already spent.",
-            "Generic AI summaries are helpful, but they do not automatically operate inside the delivery workflow.",
-            "We need review assistance that is contextual, consistent, and actionable at the exact line of change.",
+            "Manual reviews are slow — developers wait hours or days for feedback.",
+            "Quality varies by reviewer — same mistakes get through on different PRs.",
+            "Repetitive checks waste senior engineer time: lint, magic numbers, hardcoded values.",
+            "Test-coverage gaps go unnoticed until production.",
         ],
     },
+    # 3 — Why Agentic
     {
-        "title": "Why This Is Agentic — Not Just Prompting",
+        "type": "bullets",
+        "title": "Why This Is an Agent — Not Just a Prompt",
         "bullets": [
-            "Trigger-aware: starts automatically when a pull request is opened or updated.",
-            "Context-aware: reads PR diff, Android lint output, and unit-test coverage context.",
-            "Role-aware: evaluates the change through specialist reviewer personas.",
-            "Action-oriented: converts findings into structured output and posts review comments back into GitHub.",
-            "Feedback-loop ready: developers fix issues in the same PR flow and re-run the agent on the next push.",
+            "Trigger-aware: starts automatically when a PR is opened or updated.",
+            "Context-aware: reads PR diff, lint output, and test coverage.",
+            "Role-aware: reasons through specialist reviewer personas (Architecture, UI, Security, QA).",
+            "Action-oriented: posts structured review comments at the exact line of code.",
+            "Feedback-loop: developer fixes → pushes → agent re-reviews in the same PR.",
         ],
+        "callout": (
+            "\"The agent behaves like a Staff Engineer: it reads context, "
+            "reasons across specialties, and acts where the developer needs to.\""
+        ),
     },
+    # 4 — Flow diagram
     {
-        "title": "End-to-End Flow",
         "type": "diagram",
-        "caption": "Current workflow: PR event → context collection → master reviewer → specialist reasoning → structured findings → inline PR comments",
+        "title": "End-to-End Flow",
+        "caption": (
+            "PR event → diff + lint + coverage collection → "
+            "Gemini master reviewer → specialist sub-agents → "
+            "structured findings → GitHub inline comments"
+        ),
     },
+    # 5 — Architecture 3-column
     {
-        "title": "Architecture of the Solution",
+        "type": "columns",
+        "title": "How It Is Built",
         "columns": [
             {
-                "heading": "1. Orchestration Layer",
+                "heading": "① Orchestration",
                 "items": [
-                    "GitHub Actions workflow (`.github/workflows/ai-pr-reviewer.yml`)",
-                    "Diff generation (`pr_diff.patch`)",
-                    "Lint + coverage context collection",
-                    "Python controller (`.github/scripts/run_agent.py`)",
+                    "GitHub Actions workflow",
+                    "Diff (pr_diff.patch)",
+                    "Android Lint context",
+                    "JaCoCo coverage XML",
+                    "run_agent.py controller",
                 ],
             },
             {
-                "heading": "2. Intelligence Layer",
+                "heading": "② Intelligence",
                 "items": [
-                    "`master-reviewer-agent.md` as lead reviewer",
-                    "Architecture / Logic sub-agent",
-                    "Compose UI sub-agent",
-                    "Security / Config sub-agent",
-                    "Test / QA sub-agent",
+                    "master-reviewer-agent.md",
+                    "arch-logic-agent.md",
+                    "compose-ui-agent.md",
+                    "security-config-agent.md",
+                    "test-qa-agent.md",
                 ],
             },
             {
-                "heading": "3. Output Layer",
+                "heading": "③ Output",
                 "items": [
                     "Structured XML findings",
-                    "Severity ordering",
-                    "Exact file + line extraction",
-                    "Inline GitHub review comments",
-                    "Coverage alerts for business-logic files below 75%",
+                    "Severity ranking",
+                    "Exact file + line pinning",
+                    "Inline GitHub comments",
+                    "Coverage alerts (< 75 %)",
                 ],
             },
         ],
     },
+    # 6 — What it checks
     {
-        "title": "What This Agent Checks",
+        "type": "bullets",
+        "title": "What the Agent Reviews",
         "bullets": [
-            "Android lint and Kotlin code quality rules",
-            "Hardcoded strings, colors, numbers, and static literals",
-            "Correct use of BuildConfig vs Android resources",
-            "Compose UI quality, accessibility, and recomposition hygiene",
-            "Architecture boundaries across ViewModel / Repository / data layers",
-            "Security and configuration risks in build scripts and API usage",
-            "Testability and coverage gaps in business logic",
+            "Hardcoded strings, colours, magic numbers → suggests BuildConfig or resource XML.",
+            "Android Lint + Kotlin lint rules and code formatting.",
+            "Compose UI quality, accessibility, and recomposition hygiene.",
+            "Architecture boundaries: ViewModel / Repository / Data layers.",
+            "Security risks in build scripts, API usage, and Manifest.",
+            "Test coverage gaps in business-logic files (Repository, UseCase).",
         ],
     },
+    # 7 — Live demo
     {
-        "title": "What the Demo Will Show Live",
+        "type": "bullets",
+        "title": "What the Live Demo Shows",
         "bullets": [
-            "Step 1: Open a PR with intentional issues in Android/Kotlin files.",
-            "Step 2: GitHub Action generates diff, runs tests, coverage, and lint.",
-            "Step 3: Agent reviews only changed code and returns structured findings.",
-            "Step 4: Findings appear as line-level PR comments, not only as a generic summary.",
-            "Step 5: Coverage alerts are added separately for repository / use-case logic when below threshold.",
+            "Open a PR with intentional issues in MainActivity.kt.",
+            "GitHub Action auto-triggers: diff → lint → coverage → Gemini call.",
+            "Agent returns structured XML findings ordered by severity.",
+            "Each finding is posted as an inline comment on the exact changed line.",
+            "Coverage alert posted separately when a business-logic file is below 75 %.",
         ],
-        "callout": "Best demo line: 'The agent behaves like a staff engineer that reads context, reasons across specialties, and comments directly where the developer needs to act.'",
+        "callout": (
+            "Demo tip: 4 bugs planted —\n"
+            "hardcoded API key · hardcoded log tag\n"
+            "magic number 5000 · hardcoded welcome string"
+        ),
     },
+    # 8 — Business impact
     {
+        "type": "bullets",
         "title": "Business Impact",
         "bullets": [
-            "Faster feedback on every pull request",
-            "More consistent review quality across reviewers and repos",
-            "Less reviewer time spent on repetitive checks",
-            "Earlier detection of Android-specific quality and security issues",
-            "Reusable review policy encoded as version-controlled agent prompts",
+            "Review feedback in ~2 minutes — not hours.",
+            "Consistent quality: same bar on every PR, every repo.",
+            "Senior engineer time freed from repetitive checks.",
+            "Reusable policy: rules are version-controlled agent prompts.",
         ],
         "metrics": [
-            ("Cycle time", "Reduce back-and-forth by shifting common issues earlier"),
-            ("Quality signal", "Lint + coverage + structured review in one pass"),
-            ("Scalability", "Apply same pattern across multiple Android projects"),
+            ("Cycle time",   "Earlier feedback → fewer back-and-forth rounds"),
+            ("Quality gate", "Lint + coverage + structured review in one automated pass"),
+            ("Scale",        "Copy 3 files → works on any Android project"),
         ],
     },
+    # 9 — How to reuse
     {
-        "title": "Rollout Recommendation",
+        "type": "bullets",
+        "title": "How to Add This to Any Android Project",
         "bullets": [
-            "Start in review-only mode on one Android repository.",
-            "Track false positives and tune the prompt files for 1–2 sprints.",
-            "Keep humans in the loop; use the agent to accelerate, not replace, engineering judgment.",
-            "Then templatize the workflow and prompt set for additional mobile projects.",
+            "Copy .github/workflows/ai-pr-reviewer.yml to your repo.",
+            "Copy .github/scripts/run_agent.py and master-reviewer-agent.md.",
+            "Add LLM_API_KEY to GitHub → Settings → Secrets.",
+            "Optionally edit the .md prompt files to match your project's rules.",
+            "Open a PR — the agent runs automatically.",
         ],
+        "callout": "Total setup time: ~15 minutes",
     },
+    # 10 — Close
     {
-        "title": "Close / Ask",
+        "type": "bullets",
+        "title": "Next Steps",
         "bullets": [
-            "Approve a pilot for one repo or one team.",
-            "Use this as a standard AI agent use case inside the SDLC.",
-            "Measure review turnaround time, comment usefulness, and escaped defect reduction.",
+            "Pilot on one Android repo — run in review-only mode for 2 sprints.",
+            "Tune the prompt files based on false-positive feedback.",
+            "Track: review turnaround time, escaped defects, coverage trend.",
+            "Templatise and roll out across additional mobile projects.",
         ],
-        "quote": "This is a practical example of agentic AI: not just generating text, but participating in an engineering workflow and producing accountable review actions.",
+        "callout": (
+            "\"This is practical agentic AI: not generating text, "
+            "but participating in an engineering workflow and producing "
+            "accountable review actions.\""
+        ),
     },
 ]
 
+# ── PIL helpers ───────────────────────────────────────────────────────────────
 
-def font(size: int):
-    candidates = [
+def _pil_font(size: int) -> ImageFont.FreeTypeFont:
+    for path in [
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/System/Library/Fonts/Supplemental/Helvetica.ttc",
-        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-    ]
-    for path in candidates:
+        "/System/Library/Fonts/Arial.ttf",
+    ]:
         try:
             return ImageFont.truetype(path, size)
         except OSError:
-            continue
+            pass
     return ImageFont.load_default()
 
+F_TITLE  = _pil_font(32)
+F_BOX    = _pil_font(19)
+F_CAPTION= _pil_font(16)
 
-FONT_TITLE = font(34)
-FONT_BOX = font(20)
-FONT_SMALL = font(17)
 
-
-def draw_box(draw, xy, text, fill, outline=(180, 196, 214), text_fill=(20, 20, 20), radius=18):
-    draw.rounded_rectangle(xy, radius=radius, fill=fill, outline=outline, width=2)
+def _draw_box(draw, xy, text, fill, radius=16):
+    """Draw a rounded rectangle with centred, auto-wrapped text."""
     x1, y1, x2, y2 = xy
-    max_width = x2 - x1 - 24
-    lines = []
-    for paragraph in text.split("\n"):
-        words = paragraph.split()
-        current = ""
-        for word in words:
-            trial = word if not current else f"{current} {word}"
-            if draw.textlength(trial, font=FONT_BOX) <= max_width:
-                current = trial
-            else:
-                if current:
-                    lines.append(current)
-                current = word
-        if current:
-            lines.append(current)
-    line_height = 24
-    total_h = len(lines) * line_height
-    current_y = y1 + ((y2 - y1 - total_h) / 2)
-    for line in lines:
-        text_w = draw.textlength(line, font=FONT_BOX)
-        draw.text((x1 + (x2 - x1 - text_w) / 2, current_y), line, font=FONT_BOX, fill=text_fill)
-        current_y += line_height
+    draw.rounded_rectangle(xy, radius=radius, fill=fill,
+                           outline=(160, 180, 200), width=2)
+    max_w = x2 - x1 - 20
+    lines, current = [], ""
+    for word in text.split():
+        trial = f"{current} {word}".strip()
+        if draw.textlength(trial, font=F_BOX) <= max_w:
+            current = trial
+        else:
+            if current:
+                lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    lh = 23
+    ty = y1 + (y2 - y1 - len(lines) * lh) / 2
+    for ln in lines:
+        tw = draw.textlength(ln, font=F_BOX)
+        draw.text((x1 + (x2 - x1 - tw) / 2, ty), ln, font=F_BOX, fill=(20, 20, 20))
+        ty += lh
 
 
-def arrow(draw, start, end, fill=(73, 96, 122), width=5, head=10):
-    draw.line([start, end], fill=fill, width=width)
-    x1, y1 = start
-    x2, y2 = end
+def _arrow(draw, start, end):
+    fill, w, head = (70, 100, 130), 4, 9
+    draw.line([start, end], fill=fill, width=w)
+    x1, y1 = start; x2, y2 = end
     if abs(x2 - x1) >= abs(y2 - y1):
-        direction = 1 if x2 >= x1 else -1
-        draw.polygon([
-            (x2, y2),
-            (x2 - direction * head * 2, y2 - head),
-            (x2 - direction * head * 2, y2 + head),
-        ], fill=fill)
+        d = 1 if x2 >= x1 else -1
+        draw.polygon([(x2, y2), (x2 - d*head*2, y2 - head), (x2 - d*head*2, y2 + head)], fill=fill)
     else:
-        direction = 1 if y2 >= y1 else -1
-        draw.polygon([
-            (x2, y2),
-            (x2 - head, y2 - direction * head * 2),
-            (x2 + head, y2 - direction * head * 2),
-        ], fill=fill)
+        d = 1 if y2 >= y1 else -1
+        draw.polygon([(x2, y2), (x2 - head, y2 - d*head*2), (x2 + head, y2 - d*head*2)], fill=fill)
 
+
+# ── Flow diagram ──────────────────────────────────────────────────────────────
 
 def create_flow_diagram(path: Path):
-    image = Image.new("RGB", (1600, 900), color=(248, 250, 252))
-    draw = ImageDraw.Draw(image)
+    W, H = 1600, 860
+    img  = Image.new("RGB", (W, H), color=(248, 250, 252))
+    draw = ImageDraw.Draw(img)
 
-    draw.text((55, 30), "Agentic AI Review Flow", font=FONT_TITLE, fill=(14, 44, 84))
-    draw.text((55, 78), "PR event → context collection → specialist reasoning → GitHub review comments", font=FONT_SMALL, fill=(80, 96, 114))
+    # header
+    draw.text((50, 28), "Agentic AI Review Flow", font=F_TITLE, fill=(14, 44, 84))
+    draw.text((50, 72), "PR event → context collection → Gemini reasoning → GitHub comments", font=F_CAPTION, fill=(90, 90, 90))
 
-    boxes = {
-        "pr": (60, 150, 290, 240),
-        "action": (350, 150, 610, 240),
-        "diff": (680, 90, 920, 180),
-        "lint": (680, 220, 920, 310),
-        "coverage": (680, 350, 920, 440),
-        "runner": (990, 180, 1250, 270),
-        "master": (1310, 180, 1540, 270),
-        "arch": (1110, 380, 1310, 470),
-        "ui": (1330, 380, 1530, 470),
-        "sec": (1110, 520, 1310, 610),
-        "qa": (1330, 520, 1530, 610),
-        "xml": (990, 680, 1250, 770),
-        "comments": (1310, 680, 1540, 770),
+    C_TRIGGER  = (220, 235, 252)
+    C_CONTEXT  = (220, 245, 232)
+    C_AGENT    = (255, 243, 210)
+    C_OUTPUT   = (242, 220, 252)
+
+    # ── Boxes (x1,y1,x2,y2) ─────────────────────────────────────────────────
+    B = {
+        # Column 1 — Trigger
+        "pr":       (30,  160, 220, 240),
+        # Column 2 — Orchestration
+        "action":   (270, 160, 460, 240),
+        "diff":     (510, 120, 700, 200),
+        "lint":     (510, 240, 700, 320),
+        "cov":      (510, 360, 700, 440),
+        # Column 3 — Controller
+        "runner":   (750, 230, 950, 330),
+        # Column 4 — Master agent
+        "master":   (1000, 230, 1200, 330),
+        # Column 5 — Sub-agents
+        "arch":     (1250, 140, 1450, 220),
+        "ui":       (1250, 260, 1450, 340),
+        "sec":      (1250, 380, 1450, 460),
+        "qa":       (1250, 500, 1450, 580),
+        # Column 6 — Output
+        "findings": (1490, 240, 1570, 460),
+        "comments": (750,  580, 1200, 660),
     }
 
-    fill_main = (230, 240, 250)
-    fill_agent = (223, 245, 236)
-    fill_output = (255, 244, 214)
+    _draw_box(draw, B["pr"],       "Developer\nopens PR",         C_TRIGGER)
+    _draw_box(draw, B["action"],   "GitHub Action\ntriggers",     C_TRIGGER)
+    _draw_box(draw, B["diff"],     "PR diff\n(pr_diff.patch)",    C_CONTEXT)
+    _draw_box(draw, B["lint"],     "Android Lint\noutput",        C_CONTEXT)
+    _draw_box(draw, B["cov"],      "JaCoCo\ncoverage XML",        C_CONTEXT)
+    _draw_box(draw, B["runner"],   "run_agent.py\norchestrator",  C_TRIGGER)
+    _draw_box(draw, B["master"],   "master-reviewer\nagent",      C_AGENT)
+    _draw_box(draw, B["arch"],     "Architecture\n& Logic",       C_AGENT)
+    _draw_box(draw, B["ui"],       "Compose\nUI",                 C_AGENT)
+    _draw_box(draw, B["sec"],      "Security\n& Config",          C_AGENT)
+    _draw_box(draw, B["qa"],       "Test\n& QA",                  C_AGENT)
+    _draw_box(draw, B["comments"], "GitHub inline review comments + coverage alerts", C_OUTPUT)
 
-    draw_box(draw, boxes["pr"], "Developer opens\nor updates PR", fill_main)
-    draw_box(draw, boxes["action"], "GitHub Action\nstarts workflow", fill_main)
-    draw_box(draw, boxes["diff"], "Generate\npr_diff.patch", fill_main)
-    draw_box(draw, boxes["lint"], "Run Android lint\ncollect lint context", fill_main)
-    draw_box(draw, boxes["coverage"], "Run unit tests\ncollect coverage context", fill_main)
-    draw_box(draw, boxes["runner"], "run_agent.py\norchestrator", fill_main)
-    draw_box(draw, boxes["master"], "Master reviewer\nagent", fill_agent)
-    draw_box(draw, boxes["arch"], "Architecture /\nLogic agent", fill_agent)
-    draw_box(draw, boxes["ui"], "Compose UI\nagent", fill_agent)
-    draw_box(draw, boxes["sec"], "Security / Config\nagent", fill_agent)
-    draw_box(draw, boxes["qa"], "Test / QA\nagent", fill_agent)
-    draw_box(draw, boxes["xml"], "Structured XML\nfindings", fill_output)
-    draw_box(draw, boxes["comments"], "GitHub inline review\ncomments + coverage alerts", fill_output)
+    def mid(box, axis="x"):
+        return (box[0]+box[2])//2 if axis == "x" else (box[1]+box[3])//2
 
-    arrow(draw, (290, 195), (350, 195))
-    arrow(draw, (610, 195), (680, 135))
-    arrow(draw, (610, 195), (680, 265))
-    arrow(draw, (610, 195), (680, 395))
-    arrow(draw, (920, 135), (990, 210))
-    arrow(draw, (920, 265), (990, 225))
-    arrow(draw, (920, 395), (990, 240))
-    arrow(draw, (1250, 225), (1310, 225))
+    # Trigger chain
+    _arrow(draw, (B["pr"][2],    mid(B["pr"],"y")),   (B["action"][0], mid(B["action"],"y")))
+    _arrow(draw, (B["action"][2],mid(B["action"],"y")),(B["diff"][0],   mid(B["diff"],"y")))
+    _arrow(draw, (B["action"][2],mid(B["action"],"y")),(B["lint"][0],   mid(B["lint"],"y")))
+    _arrow(draw, (B["action"][2],mid(B["action"],"y")),(B["cov"][0],    mid(B["cov"],"y")))
 
-    arrow(draw, (1425, 270), (1210, 380))
-    arrow(draw, (1425, 270), (1430, 380))
-    arrow(draw, (1425, 270), (1210, 520))
-    arrow(draw, (1425, 270), (1430, 520))
+    # Context → runner
+    _arrow(draw, (B["diff"][2],mid(B["diff"],"y")),   (B["runner"][0], mid(B["diff"],"y")))
+    _arrow(draw, (B["lint"][2],mid(B["lint"],"y")),   (B["runner"][0], mid(B["lint"],"y")))
+    _arrow(draw, (B["cov"][2], mid(B["cov"],"y")),    (B["runner"][0], mid(B["cov"],"y")))
 
-    arrow(draw, (1210, 470), (1120, 680))
-    arrow(draw, (1430, 470), (1120, 680))
-    arrow(draw, (1210, 610), (1120, 725))
-    arrow(draw, (1430, 610), (1120, 725))
-    arrow(draw, (1250, 725), (1310, 725))
+    # runner → master → sub-agents
+    _arrow(draw, (B["runner"][2],mid(B["runner"],"y")),(B["master"][0],mid(B["master"],"y")))
+    for sub in ["arch","ui","sec","qa"]:
+        _arrow(draw, (B["master"][2], mid(B["master"],"y")), (B[sub][0], mid(B[sub],"y")))
 
-    draw.text((1060, 835), "Outcome: exact file + line findings appear where developers already work", font=FONT_SMALL, fill=(56, 72, 88))
-    image.save(path)
+    # sub-agents → comments
+    for sub in ["arch","ui","sec","qa"]:
+        _arrow(draw, (mid(B[sub],"x"), B[sub][3]), (mid(B["comments"],"x"), B["comments"][1]))
 
+    # Caption
+    draw.text((50, 790), "Each finding is posted as an inline comment pinned to the exact changed line in the PR.", font=F_CAPTION, fill=(80, 80, 80))
 
-def set_background(slide):
-    fill = slide.background.fill
-    fill.solid()
-    fill.fore_color.rgb = BG
+    img.save(path)
+    print(f"  Diagram  → {path}")
 
 
-def add_title(slide, title, subtitle=None):
-    title_box = slide.shapes.add_textbox(Inches(0.55), Inches(0.35), Inches(12), Inches(0.8))
-    tf = title_box.text_frame
-    p = tf.paragraphs[0]
-    run = p.add_run()
-    run.text = title
-    run.font.name = "Aptos"
-    run.font.size = Pt(28)
-    run.font.bold = True
-    run.font.color.rgb = PRIMARY
-    if subtitle:
-        sub_box = slide.shapes.add_textbox(Inches(0.58), Inches(1.1), Inches(11.6), Inches(0.5))
-        sub_tf = sub_box.text_frame
-        p2 = sub_tf.paragraphs[0]
-        r2 = p2.add_run()
-        r2.text = subtitle
-        r2.font.name = "Aptos"
-        r2.font.size = Pt(13)
-        r2.font.color.rgb = MUTED
+# ── PPTX helpers ──────────────────────────────────────────────────────────────
 
-
-def add_bullets_slide(prs, title, bullets, callout=None, quote=None, metrics=None):
+def _new_blank_slide(prs):
     slide = prs.slides.add_slide(prs.slide_layouts[6])
-    set_background(slide)
-    add_title(slide, title)
-
-    body = slide.shapes.add_textbox(Inches(0.8), Inches(1.45), Inches(7.0), Inches(4.8))
-    tf = body.text_frame
-    tf.word_wrap = True
-    for index, bullet in enumerate(bullets):
-        p = tf.paragraphs[0] if index == 0 else tf.add_paragraph()
-        p.text = bullet
-        p.level = 0
-        p.space_after = Pt(10)
-        p.font.name = "Aptos"
-        p.font.size = Pt(22)
-        p.font.color.rgb = TEXT
-
-    if callout:
-        shape = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE, Inches(8.0), Inches(1.7), Inches(4.7), Inches(1.9))
-        shape.fill.solid()
-        shape.fill.fore_color.rgb = LIGHT
-        shape.line.color.rgb = ACCENT
-        tx = shape.text_frame
-        tx.word_wrap = True
-        p = tx.paragraphs[0]
-        p.text = callout
-        p.font.name = "Aptos"
-        p.font.size = Pt(18)
-        p.font.bold = True
-        p.font.color.rgb = PRIMARY
-
-    if quote:
-        shape = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE, Inches(7.9), Inches(4.2), Inches(4.8), Inches(1.7))
-        shape.fill.solid()
-        shape.fill.fore_color.rgb = LIGHT
-        shape.line.color.rgb = ACCENT
-        tx = shape.text_frame
-        tx.word_wrap = True
-        p = tx.paragraphs[0]
-        p.text = quote
-        p.alignment = PP_ALIGN.LEFT
-        p.font.name = "Aptos"
-        p.font.size = Pt(16)
-        p.font.italic = True
-        p.font.color.rgb = PRIMARY
-
-    if metrics:
-        top = 4.0
-        for idx, (metric, detail) in enumerate(metrics):
-            y = Inches(top + idx * 0.75)
-            shape = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE, Inches(7.9), y, Inches(4.8), Inches(0.62))
-            shape.fill.solid()
-            shape.fill.fore_color.rgb = WHITE
-            shape.line.color.rgb = ACCENT
-            tx = shape.text_frame
-            tx.word_wrap = True
-            p = tx.paragraphs[0]
-            p.text = f"{metric}: {detail}"
-            p.font.name = "Aptos"
-            p.font.size = Pt(14)
-            p.font.color.rgb = TEXT
+    slide.background.fill.solid()
+    slide.background.fill.fore_color.rgb = BG
+    return slide
 
 
-def add_columns_slide(prs, title, columns):
-    slide = prs.slides.add_slide(prs.slide_layouts[6])
-    set_background(slide)
-    add_title(slide, title)
-
-    positions = [0.6, 4.35, 8.1]
-    for idx, column in enumerate(columns):
-        x = Inches(positions[idx])
-        box = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE, x, Inches(1.55), Inches(3.1), Inches(4.8))
-        box.fill.solid()
-        box.fill.fore_color.rgb = WHITE
-        box.line.color.rgb = ACCENT
-        tf = box.text_frame
-        tf.word_wrap = True
-        p = tf.paragraphs[0]
-        p.text = column["heading"]
-        p.font.name = "Aptos"
-        p.font.size = Pt(20)
-        p.font.bold = True
-        p.font.color.rgb = PRIMARY
-        for item in column["items"]:
-            bullet = tf.add_paragraph()
-            bullet.text = item
-            bullet.level = 0
-            bullet.font.name = "Aptos"
-            bullet.font.size = Pt(15)
-            bullet.font.color.rgb = TEXT
+def _add_title(slide, text: str, y_in=0.32):
+    tb = slide.shapes.add_textbox(Inches(0.55), Inches(y_in), Inches(12.2), Inches(0.75))
+    p  = tb.text_frame.paragraphs[0]
+    r  = p.add_run()
+    r.text           = text
+    r.font.name      = "Aptos"
+    r.font.size      = Pt(26)
+    r.font.bold      = True
+    r.font.color.rgb = PRIMARY
+    # underline rule
+    rule = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.RECTANGLE, Inches(0.55), Inches(y_in + 0.72), Inches(12.2), Inches(0.03))
+    rule.fill.solid(); rule.fill.fore_color.rgb = ACCENT
+    rule.line.fill.background()
 
 
-def add_diagram_slide(prs, title, caption):
-    slide = prs.slides.add_slide(prs.slide_layouts[6])
-    set_background(slide)
-    add_title(slide, title)
-    slide.shapes.add_picture(str(DIAGRAM_PATH), Inches(0.45), Inches(1.45), width=Inches(12.35))
-    caption_box = slide.shapes.add_textbox(Inches(0.7), Inches(6.5), Inches(11.6), Inches(0.45))
-    tf = caption_box.text_frame
-    p = tf.paragraphs[0]
-    p.text = caption
-    p.font.name = "Aptos"
-    p.font.size = Pt(13)
-    p.font.color.rgb = MUTED
-
-
-def add_title_slide(prs, title, subtitle, footer):
-    slide = prs.slides.add_slide(prs.slide_layouts[6])
-    set_background(slide)
-
-    band = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.RECTANGLE, Inches(0), Inches(0), Inches(13.33), Inches(1.2))
-    band.fill.solid()
-    band.fill.fore_color.rgb = PRIMARY
-    band.line.fill.background()
-
-    title_box = slide.shapes.add_textbox(Inches(0.7), Inches(1.6), Inches(12), Inches(1.2))
-    tf = title_box.text_frame
-    p = tf.paragraphs[0]
-    p.text = title
-    p.font.name = "Aptos"
-    p.font.size = Pt(30)
-    p.font.bold = True
+def _add_callout(slide, text: str, x=8.0, y=1.5, w=4.9, h=None):
+    lines = text.count("\n") + 1
+    h = h or max(1.0, lines * 0.55 + 0.4)
+    shape = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE,
+                                   Inches(x), Inches(y), Inches(w), Inches(h))
+    shape.fill.solid(); shape.fill.fore_color.rgb = LIGHT
+    shape.line.color.rgb = ACCENT
+    tf = shape.text_frame; tf.word_wrap = True
+    p  = tf.paragraphs[0]
+    p.text           = text
+    p.font.name      = "Aptos"
+    p.font.size      = Pt(15)
+    p.font.bold      = True
     p.font.color.rgb = PRIMARY
 
-    sub_box = slide.shapes.add_textbox(Inches(0.72), Inches(2.55), Inches(10.8), Inches(1.0))
-    stf = sub_box.text_frame
-    sp = stf.paragraphs[0]
-    sp.text = subtitle
-    sp.font.name = "Aptos"
-    sp.font.size = Pt(21)
-    sp.font.color.rgb = TEXT
 
-    highlight = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE, Inches(0.72), Inches(3.7), Inches(11.6), Inches(1.6))
-    highlight.fill.solid()
-    highlight.fill.fore_color.rgb = LIGHT
+def _add_bullets(slide, bullets, x=0.6, y=1.45, w=7.0):
+    tb = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(5.5))
+    tf = tb.text_frame; tf.word_wrap = True
+    for i, bullet in enumerate(bullets):
+        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+        p.text       = f"▸  {bullet}"
+        p.space_after = Pt(10)
+        p.font.name  = "Aptos"
+        p.font.size  = Pt(19)
+        p.font.color.rgb = TEXT
+
+
+def _add_metrics(slide, metrics, x=7.9, start_y=3.8):
+    for i, (label, detail) in enumerate(metrics):
+        y = start_y + i * 0.82
+        shape = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE,
+                                       Inches(x), Inches(y), Inches(5.0), Inches(0.68))
+        shape.fill.solid(); shape.fill.fore_color.rgb = WHITE
+        shape.line.color.rgb = ACCENT
+        tf = shape.text_frame; tf.word_wrap = True
+        p  = tf.paragraphs[0]
+        p.text = f"  {label}:  {detail}"
+        p.font.name  = "Aptos"
+        p.font.size  = Pt(13)
+        p.font.color.rgb = TEXT
+
+
+# ── Slide builders ────────────────────────────────────────────────────────────
+
+def _slide_title(prs, data):
+    slide = _new_blank_slide(prs)
+    # dark header band
+    band = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.RECTANGLE,
+                                  Inches(0), Inches(0), Inches(13.333), Inches(1.4))
+    band.fill.solid(); band.fill.fore_color.rgb = PRIMARY
+    band.line.fill.background()
+
+    for shp in [
+        slide.shapes.add_textbox(Inches(0.6), Inches(1.55), Inches(12), Inches(0.95)),
+    ]:
+        p = shp.text_frame.paragraphs[0]
+        r = p.add_run()
+        r.text = data["title"]; r.font.name = "Aptos"
+        r.font.size = Pt(30); r.font.bold = True; r.font.color.rgb = PRIMARY
+
+    sub = slide.shapes.add_textbox(Inches(0.62), Inches(2.55), Inches(11), Inches(0.7))
+    sp  = sub.text_frame.paragraphs[0]
+    sp.text = data["subtitle"]
+    sp.font.name = "Aptos"; sp.font.size = Pt(20); sp.font.color.rgb = TEXT
+
+    highlight = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE,
+                                       Inches(0.62), Inches(3.45), Inches(12.1), Inches(1.6))
+    highlight.fill.solid(); highlight.fill.fore_color.rgb = LIGHT
     highlight.line.color.rgb = ACCENT
-    htf = highlight.text_frame
-    htf.word_wrap = True
-    hp = htf.paragraphs[0]
-    hp.text = "Key message: This solution behaves like an agent — it observes PR context, reasons across specialist reviewer roles, and performs a workflow action by posting code-review comments directly into GitHub."
-    hp.font.name = "Aptos"
-    hp.font.size = Pt(20)
-    hp.font.bold = True
-    hp.font.color.rgb = PRIMARY
+    htf = highlight.text_frame; htf.word_wrap = True
+    hp  = htf.paragraphs[0]
+    hp.text = (
+        "Key idea: This is agentic AI — not just generating text, but participating in "
+        "an engineering workflow and producing accountable, line-level review actions inside GitHub."
+    )
+    hp.font.name = "Aptos"; hp.font.size = Pt(19)
+    hp.font.bold = True; hp.font.color.rgb = PRIMARY
 
-    footer_box = slide.shapes.add_textbox(Inches(0.75), Inches(6.8), Inches(12), Inches(0.3))
-    ftf = footer_box.text_frame
-    fp = ftf.paragraphs[0]
-    fp.text = footer
-    fp.font.name = "Aptos"
-    fp.font.size = Pt(11)
-    fp.font.color.rgb = MUTED
+    footer = slide.shapes.add_textbox(Inches(0.6), Inches(6.9), Inches(12), Inches(0.35))
+    fp = footer.text_frame.paragraphs[0]
+    fp.text = data["footer"]
+    fp.font.name = "Aptos"; fp.font.size = Pt(11); fp.font.color.rgb = MUTED
+
+
+def _slide_bullets(prs, data):
+    slide = _new_blank_slide(prs)
+    _add_title(slide, data["title"])
+    w = 7.1 if ("callout" in data or "metrics" in data) else 12.3
+    _add_bullets(slide, data["bullets"], w=w)
+    if "callout" in data:
+        _add_callout(slide, data["callout"])
+    if "metrics" in data:
+        _add_metrics(slide, data["metrics"])
+
+
+def _slide_diagram(prs, data):
+    slide = _new_blank_slide(prs)
+    _add_title(slide, data["title"])
+    slide.shapes.add_picture(str(DIAG_PATH), Inches(0.4), Inches(1.35), width=Inches(12.5))
+    cap = slide.shapes.add_textbox(Inches(0.6), Inches(6.85), Inches(12), Inches(0.4))
+    cp  = cap.text_frame.paragraphs[0]
+    cp.text = data["caption"]
+    cp.font.name = "Aptos"; cp.font.size = Pt(12); cp.font.color.rgb = MUTED
+
+
+def _slide_columns(prs, data):
+    slide = _new_blank_slide(prs)
+    _add_title(slide, data["title"])
+    positions = [0.5, 4.45, 8.4]
+    for idx, col in enumerate(data["columns"]):
+        x = Inches(positions[idx])
+        box = slide.shapes.add_shape(MSO_AUTO_SHAPE_TYPE.ROUNDED_RECTANGLE,
+                                     x, Inches(1.45), Inches(3.5), Inches(5.3))
+        box.fill.solid(); box.fill.fore_color.rgb = WHITE
+        box.line.color.rgb = ACCENT
+        tf = box.text_frame; tf.word_wrap = True
+        # heading
+        ph = tf.paragraphs[0]
+        ph.text = col["heading"]
+        ph.font.name = "Aptos"; ph.font.size = Pt(18)
+        ph.font.bold = True; ph.font.color.rgb = PRIMARY
+        # items
+        for item in col["items"]:
+            pi = tf.add_paragraph()
+            pi.text = f"  • {item}"
+            pi.space_before = Pt(4)
+            pi.font.name = "Aptos"; pi.font.size = Pt(14)
+            pi.font.color.rgb = TEXT
+
+
+# ── Build ────────────────────────────────────────────────────────────────────
+
+BUILDERS = {
+    "title":   _slide_title,
+    "bullets": _slide_bullets,
+    "diagram": _slide_diagram,
+    "columns": _slide_columns,
+}
 
 
 def build_deck():
     ROOT.mkdir(parents=True, exist_ok=True)
-    create_flow_diagram(DIAGRAM_PATH)
+    print("Generating flow diagram …")
+    create_flow_diagram(DIAG_PATH)
 
     prs = Presentation()
-    prs.slide_width = Inches(13.333)
+    prs.slide_width  = Inches(13.333)
     prs.slide_height = Inches(7.5)
 
-    for slide_data in SLIDES:
-        if "subtitle" in slide_data:
-            add_title_slide(prs, slide_data["title"], slide_data["subtitle"], slide_data["footer"])
-        elif slide_data.get("type") == "diagram":
-            add_diagram_slide(prs, slide_data["title"], slide_data["caption"])
-        elif "columns" in slide_data:
-            add_columns_slide(prs, slide_data["title"], slide_data["columns"])
-        else:
-            add_bullets_slide(
-                prs,
-                slide_data["title"],
-                slide_data["bullets"],
-                callout=slide_data.get("callout"),
-                quote=slide_data.get("quote"),
-                metrics=slide_data.get("metrics"),
-            )
+    for i, slide_data in enumerate(SLIDES, 1):
+        builder = BUILDERS[slide_data["type"]]
+        builder(prs, slide_data)
+        print(f"  Slide {i:>2}: {slide_data['title']}")
 
     prs.save(PPTX_PATH)
-    print(f"Created {PPTX_PATH}")
-    print(f"Created {DIAGRAM_PATH}")
+    print(f"\nDone → {PPTX_PATH}")
 
 
 if __name__ == "__main__":
