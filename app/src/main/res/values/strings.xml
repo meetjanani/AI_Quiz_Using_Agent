@@ -21,4 +21,13 @@
     <string name="shopping_analyze_another">Analyze Another Product</string>
     <string name="shopping_error_title">Could not analyze this product</string>
     <string name="shopping_retry">Retry</string>
+
+    <!-- KAN-1: Splash Screen -->
+    <string name="splash_app_name">AI Agent Playground</string>
+    <string name="splash_tagline">Powered by AI • Built for you</string>
+    <string name="splash_logo_placeholder">AI</string>
+    <string name="splash_logo_content_description">App logo</string>
+    <string name="splash_error_title">Failed to start</string>
+    <string name="splash_retry">Retry</string>
+    <string name="home_open_splash_demo">Splash Screen Demo</string>
 </resources>
