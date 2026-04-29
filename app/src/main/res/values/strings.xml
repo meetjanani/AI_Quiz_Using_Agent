@@ -1,3 +1,24 @@
 <resources>
     <string name="app_name">Dummy_Quiz_Using_Agent</string>
+    <string name="home_title">AI Agent Playground</string>
+    <string name="home_subtitle">Pick an agent experience to continue.</string>
+    <string name="home_open_quiz">Open Quiz Agent</string>
+    <string name="home_open_shopping_agent">Open Smart Shopping Agent</string>
+
+    <string name="shopping_title">Smart Shopping Decision Agent</string>
+    <string name="shopping_subtitle">Paste an Amazon/Flipkart product link to get review summary, fake-review detection, alternatives, and personalized recommendation.</string>
+    <string name="shopping_product_link_label">Product URL</string>
+    <string name="shopping_product_link_placeholder">https://www.amazon.in/... or https://www.flipkart.com/...</string>
+    <string name="shopping_preference_title">What matters most to you?</string>
+    <string name="shopping_analyze_button">Analyze Product</string>
+    <string name="shopping_back_to_home">Back to Home</string>
+    <string name="shopping_summary_title">Review Summary</string>
+    <string name="shopping_fake_review_title">Fake Review Detection</string>
+    <string name="shopping_fake_review_level">Risk: %1$s (%2$d/100)</string>
+    <string name="shopping_alternatives_title">Suggested Alternatives</string>
+    <string name="shopping_no_alternatives">No clear alternatives identified from available context.</string>
+    <string name="shopping_personalized_title">Personalized Suggestion</string>
+    <string name="shopping_analyze_another">Analyze Another Product</string>
+    <string name="shopping_error_title">Could not analyze this product</string>
+    <string name="shopping_retry">Retry</string>
 </resources>
