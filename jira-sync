@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# One-command Jira tool for Copilot @workspace usage.
+#
+# Usage:
+#   ./jira-sync                    → fetch all stories (last 180 days)
+#   ./jira-sync --days 90          → fetch stories from last 90 days
+#   ./jira-sync --implement KAN-1  → fetch one story + print Copilot prompt
+#   ./jira-sync --help             → show help
+
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+FETCH_SCRIPT="$ROOT_DIR/tools/jira_context_sync/fetch_jira_stories.py"
+IMPL_SCRIPT="$ROOT_DIR/tools/jira_context_sync/implement_story.py"
+
+# ── Route --implement to the single-story implementation script ──────────────
+if [[ "${1:-}" == "--implement" ]]; then
+  if [[ -z "${2:-}" ]]; then
+    echo "Usage: ./jira-sync --implement <STORY_KEY>  (e.g. ./jira-sync --implement KAN-1)"
+    exit 1
+  fi
+  if [[ ! -f "$IMPL_SCRIPT" ]]; then
+    echo "Error: $IMPL_SCRIPT not found"
+    exit 1
+  fi
+  exec python3 "$IMPL_SCRIPT" --story "$2"
+fi
+
+# ── Default: bulk fetch ───────────────────────────────────────────────────────
+if [[ ! -f "$FETCH_SCRIPT" ]]; then
+  echo "Error: $FETCH_SCRIPT not found"
+  exit 1
+fi
+
+if [[ $# -eq 0 ]]; then
+  exec python3 "$FETCH_SCRIPT" --days 180
+fi
+
+exec python3 "$FETCH_SCRIPT" "$@"
+
