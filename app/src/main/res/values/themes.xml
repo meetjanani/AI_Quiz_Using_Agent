@@ -2,4 +2,17 @@
 <resources>
 
     <style name="Theme.Dummy_Quiz_Using_Agent" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!--
+        KAN-1: Android 12+ Splash Screen API theme (androidx.core.splashscreen).
+        windowSplashScreenBackground  → primary brand color (purple_500)
+        windowSplashScreenAnimatedIcon → app launcher icon (centered, AC1)
+        postSplashScreenTheme          → regular app theme applied after splash exits
+    -->
+    <style name="Theme.Dummy_Quiz_Using_Agent.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/purple_500</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_round</item>
+        <item name="postSplashScreenTheme">@style/Theme.Dummy_Quiz_Using_Agent</item>
+    </style>
+
 </resources>
