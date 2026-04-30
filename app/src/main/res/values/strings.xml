@@ -1,7 +1,30 @@
 <resources>
     <string name="app_name">Dummy_Quiz_Using_Agent</string>
+
+    <!-- KAN-2 Home UX -->
     <string name="home_title">AI Agent Playground</string>
     <string name="home_subtitle">Pick an agent experience to continue.</string>
+    <string name="home_greeting">Hello, User</string>
+    <string name="home_subtitle_enhanced">What would you like to do today?</string>
+    <string name="home_loading">Preparing your home experience...</string>
+    <string name="home_loading_tip">Loading quick insights while features stay ready.</string>
+    <string name="home_retry">Retry</string>
+
+    <string name="home_quiz_title">Quiz</string>
+    <string name="home_quiz_description">Test your knowledge</string>
+    <string name="home_quiz_badge">Q</string>
+    <string name="home_quiz_icon_cd">Quiz module icon</string>
+    <string name="home_quiz_last_score">Last score: %1$d%%</string>
+
+    <string name="home_shopping_title">Smart Shopping Agent</string>
+    <string name="home_shopping_description">Find best products instantly</string>
+    <string name="home_shopping_badge">AI</string>
+    <string name="home_shopping_icon_cd">Shopping agent icon</string>
+    <string name="home_recent_search">Recent: %1$s</string>
+
+    <string name="home_footer_title">Quick Tip</string>
+
+    <!-- Keep old button labels for compatibility -->
     <string name="home_open_quiz">Open Quiz Agent</string>
     <string name="home_open_shopping_agent">Open Smart Shopping Agent</string>
 
