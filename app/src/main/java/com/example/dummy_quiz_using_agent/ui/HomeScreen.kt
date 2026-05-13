@@ -50,7 +50,8 @@ import com.example.dummy_quiz_using_agent.viewmodel.HomeViewModel
 fun HomeScreen(
     viewModel: HomeViewModel,
     onOpenQuiz: () -> Unit,
-    onOpenShoppingAgent: () -> Unit
+    onOpenShoppingAgent: () -> Unit,
+    onOpenHabitTracker: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackBarHostState = remember { SnackbarHostState() }
@@ -111,6 +112,17 @@ fun HomeScreen(
                 secondaryLine = stats.recentShoppingHint?.let {
                     stringResource(R.string.home_recent_search, it)
                 }
+            )
+
+            FeatureCard(
+                title = stringResource(R.string.home_habit_tracker_title),
+                description = stringResource(R.string.home_habit_tracker_description),
+                badge = stringResource(R.string.home_habit_tracker_badge),
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                onClick = onOpenHabitTracker,
+                iconDescription = stringResource(R.string.home_habit_tracker_icon_cd),
+                secondaryLine = stringResource(R.string.home_habit_tracker_secondary)
             )
 
             FooterSection(stats = stats)

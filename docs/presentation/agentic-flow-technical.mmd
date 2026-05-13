@@ -1,0 +1,42 @@
+flowchart LR
+    %% ===================== LOCAL =====================
+    subgraph L["🧩 Local Development (Agentic Build)"]
+        direction TB
+        A["🖥️ Start Command<br/><b>./jira-sync --implement KAN-XX</b>"]
+        B["📜 Story Loader<br/><code>tools/jira_context_sync/implement_story.py</code>"]
+        C["🔗 Jira Fetch<br/>Issue pulled via REST API"]
+        D["🗂️ Context Artifacts<br/><code>docs/jira/current_story.md</code><br/><code>docs/jira/current_story.json</code>"]
+        E["🤖 Copilot Agent Context<br/><code>@workspace</code> reads story + architecture rules"]
+        F["🛠️ Autonomous Implementation<br/>MVVM + Compose + StateFlow<br/>Model / Service / Repository / ViewModel / UI / Tests"]
+
+        A --> B --> C --> D --> E --> F
+    end
+
+    %% ===================== GITHUB =====================
+    subgraph G["☁️ GitHub PR (AI Review Pipeline)"]
+        direction TB
+        H0["📤 Push Branch + Open PR"]
+        H1["⚙️ Workflow Trigger<br/><code>.github/workflows/ai-pr-reviewer.yml</code>"]
+        H2["🧪 Build Signals<br/>PR Diff + Unit Tests + Lint + Coverage"]
+        H3["🧠 Review Context Builder<br/>Prompt + Recent Human PR Comments"]
+        H4["🔍 Gemini 2.5 Review Pass"]
+        H5["💬 Line-Level PR Comments<br/>Action posts actionable findings"]
+
+        H0 --> H1 --> H2 --> H3 --> H4 --> H5
+    end
+
+    %% Handoff
+    F -->|PR Raised| H0
+
+    %% ===================== STYLES =====================
+    classDef local fill:#EAF8F0,stroke:#1F8A4D,stroke-width:1.4px,color:#0F2A1A;
+    classDef cloud fill:#FFF4E5,stroke:#D97706,stroke-width:1.4px,color:#3F2A12;
+    classDef critical fill:#F3E8FF,stroke:#7E22CE,stroke-width:1.8px,color:#2D0E52,font-weight:bold;
+    classDef output fill:#E8F1FF,stroke:#2563EB,stroke-width:1.6px,color:#0B255A,font-weight:bold;
+
+    class A,B,C,D,E,F local
+    class H0,H1,H2,H3,H4 cloud
+    class H5 output
+    class F,H4 critical
+
+    linkStyle 5 stroke:#2563EB,stroke-width:2px;

@@ -1,0 +1,34 @@
+flowchart LR
+    %% -------- Stages --------
+    subgraph S1["1) Plan"]
+      A["🧑‍💻 Developer starts<br/><b>./jira-sync</b>"]
+      B["📘 Jira story is fetched<br/>into local project context"]
+    end
+
+    subgraph S2["2) Build"]
+      C["🤖 Copilot Agent implements feature<br/>from story requirements"]
+      D["📤 PR is raised"]
+    end
+
+    subgraph S3["3) Review"]
+      E["⚙️ AI GitHub Action triggers"]
+      F["🔍 Gemini 2.5 reviews code<br/>and posts PR comments"]
+    end
+
+    subgraph S4["4) Outcome"]
+      G["✅ Team gets actionable feedback<br/>with minimal manual effort"]
+    end
+
+    %% -------- Flow --------
+    A --> B --> C --> D --> E --> F --> G
+
+    %% -------- Styles --------
+    classDef stagePlan fill:#EAF4FF,stroke:#3B82F6,stroke-width:1.5px,color:#0F172A;
+    classDef stageBuild fill:#EEFCE8,stroke:#22C55E,stroke-width:1.5px,color:#0F172A;
+    classDef stageReview fill:#FFF4E5,stroke:#F59E0B,stroke-width:1.5px,color:#0F172A;
+    classDef stageOutcome fill:#F3E8FF,stroke:#A855F7,stroke-width:1.5px,color:#0F172A;
+
+    class A,B stagePlan
+    class C,D stageBuild
+    class E,F stageReview
+    class G stageOutcome

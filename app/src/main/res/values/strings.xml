@@ -22,6 +22,12 @@
     <string name="home_shopping_icon_cd">Shopping agent icon</string>
     <string name="home_recent_search">Recent: %1$s</string>
 
+    <string name="home_habit_tracker_title">Daily Habit Tracker</string>
+    <string name="home_habit_tracker_description">Track your daily consistency offline</string>
+    <string name="home_habit_tracker_badge">HT</string>
+    <string name="home_habit_tracker_icon_cd">Habit tracker icon</string>
+    <string name="home_habit_tracker_secondary">Mark habits complete and reset for a new day.</string>
+
     <string name="home_footer_title">Quick Tip</string>
 
     <!-- Keep old button labels for compatibility -->
@@ -44,6 +50,28 @@
     <string name="shopping_analyze_another">Analyze Another Product</string>
     <string name="shopping_error_title">Could not analyze this product</string>
     <string name="shopping_retry">Retry</string>
+
+    <!-- KAN-4: Daily Habit Tracker -->
+    <string name="habit_tracker_title">Daily Habit Tracker</string>
+    <string name="habit_tracker_loading">Loading your habits...</string>
+    <string name="habit_tracker_input_label">Habit name</string>
+    <string name="habit_tracker_input_placeholder">e.g., Drink Water</string>
+    <string name="habit_tracker_add_button">Add Habit</string>
+    <string name="habit_tracker_progress">%1$d of %2$d habits completed</string>
+    <string name="habit_tracker_empty">No habits yet. Add one to start your day.</string>
+    <string name="habit_tracker_reset_button">Reset Day</string>
+    <string name="habit_tracker_back_home">Back to Home</string>
+    <string name="habit_tracker_error_title">Could not load habits</string>
+    <string name="habit_tracker_retry">Retry</string>
+    <string name="habit_tracker_default_habit_1">Drink Water</string>
+    <string name="habit_tracker_default_habit_2">Walk 20 Minutes</string>
+    <string name="habit_tracker_default_habit_3">Read 10 Minutes</string>
+    <string name="habit_tracker_error_empty">Enter a habit name.</string>
+    <string name="habit_tracker_error_duplicate">This habit already exists.</string>
+    <string name="habit_tracker_error_max_limit">You can track up to 5 habits.</string>
+    <string name="habit_tracker_error_not_found">Habit not found.</string>
+    <string name="habit_tracker_cd_completed">%1$s completed</string>
+    <string name="habit_tracker_cd_not_completed">%1$s not completed</string>
 
     <!-- KAN-1: Splash Screen -->
     <string name="splash_app_name">AI Agent Playground</string>

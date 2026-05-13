@@ -15,18 +15,22 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.dummy_quiz_using_agent.data.GeminiService
+import com.example.dummy_quiz_using_agent.data.HabitTrackerService
 import com.example.dummy_quiz_using_agent.data.HomeService
 import com.example.dummy_quiz_using_agent.data.ShoppingDecisionService
 import com.example.dummy_quiz_using_agent.data.SplashInitService
+import com.example.dummy_quiz_using_agent.repository.DefaultHabitTrackerRepository
 import com.example.dummy_quiz_using_agent.repository.DefaultHomeRepository
 import com.example.dummy_quiz_using_agent.repository.DefaultShoppingRepository
 import com.example.dummy_quiz_using_agent.repository.DefaultSplashRepository
 import com.example.dummy_quiz_using_agent.repository.QuizRepository
+import com.example.dummy_quiz_using_agent.ui.HabitTrackerScreen
 import com.example.dummy_quiz_using_agent.ui.HomeScreen
 import com.example.dummy_quiz_using_agent.ui.QuizScreen
 import com.example.dummy_quiz_using_agent.ui.SmartShoppingScreen
 import com.example.dummy_quiz_using_agent.ui.SplashScreen
 import com.example.dummy_quiz_using_agent.ui.theme.Dummy_Quiz_Using_AgentTheme
+import com.example.dummy_quiz_using_agent.viewmodel.HabitTrackerViewModel
 import com.example.dummy_quiz_using_agent.viewmodel.HomeViewModel
 import com.example.dummy_quiz_using_agent.viewmodel.QuizViewModel
 import com.example.dummy_quiz_using_agent.viewmodel.ShoppingViewModel
@@ -66,6 +70,14 @@ class MainActivity : ComponentActivity() {
         SplashViewModel.provideFactory(splashRepository)
     }
 
+    // ── Habit Tracker (KAN-4) ────────────────────────────────────────────────
+    private val habitTrackerRepository: DefaultHabitTrackerRepository by lazy {
+        DefaultHabitTrackerRepository(service = HabitTrackerService(applicationContext))
+    }
+    private val habitTrackerViewModel: HabitTrackerViewModel by viewModels {
+        HabitTrackerViewModel.provideFactory(habitTrackerRepository)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // KAN-1: Install Android 12+ Splash Screen API before super.onCreate
         installSplashScreen()
@@ -78,7 +90,8 @@ class MainActivity : ComponentActivity() {
                         quizViewModel = viewModel,
                         shoppingViewModel = shoppingViewModel,
                         splashViewModel = splashViewModel,
-                        homeViewModel = homeViewModel
+                        homeViewModel = homeViewModel,
+                        habitTrackerViewModel = habitTrackerViewModel
                     )
                 }
             }
@@ -91,7 +104,8 @@ private fun AppNavHost(
     quizViewModel: QuizViewModel,
     shoppingViewModel: ShoppingViewModel,
     splashViewModel: SplashViewModel,
-    homeViewModel: HomeViewModel
+    homeViewModel: HomeViewModel,
+    habitTrackerViewModel: HabitTrackerViewModel
 ) {
     val navController = rememberNavController()
 
@@ -120,7 +134,8 @@ private fun AppNavHost(
             HomeScreen(
                 viewModel = homeViewModel,
                 onOpenQuiz = { navController.navigate(AppRoute.QUIZ.route) },
-                onOpenShoppingAgent = { navController.navigate(AppRoute.SHOPPING.route) }
+                onOpenShoppingAgent = { navController.navigate(AppRoute.SHOPPING.route) },
+                onOpenHabitTracker = { navController.navigate(AppRoute.HABIT_TRACKER.route) }
             )
         }
 
@@ -136,6 +151,14 @@ private fun AppNavHost(
                 onBack = { navController.popBackStack() }
             )
         }
+
+        composable(AppRoute.HABIT_TRACKER.route) {
+            BackHandler { navController.popBackStack() }
+            HabitTrackerScreen(
+                viewModel = habitTrackerViewModel,
+                onBack = { navController.popBackStack() }
+            )
+        }
     }
 }
 
@@ -143,7 +166,8 @@ private enum class AppRoute(val route: String) {
     SPLASH("splash"),   // KAN-1: new start destination
     HOME("home"),
     QUIZ("quiz"),
-    SHOPPING("shopping")
+    SHOPPING("shopping"),
+    HABIT_TRACKER("habit_tracker")
 }
 // ./jira-sync
 // ./jira-sync --implement KAN-3
